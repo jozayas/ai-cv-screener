@@ -9,8 +9,11 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
+    "openai>=1.82.1",
     "pydantic>=2.11.5",
+    "pydantic-settings>=2.10.1",
     "pyyaml>=6.0.2",
+    "rich>=14.1.0",
     "typer>=0.16.0",
 ]
 
@@ -19,9 +22,17 @@ cv-screener = "cv_screener:main"
 
 [dependency-groups]
 dev = [
+    "pyrefly>=0.34.0",
     "pytest>=8.4.0",
     "ruff>=0.11.13",
 ]
+
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+search-path = ["src"]
+python-version = "3.12"
+python-platform = "linux"
+use-ignore-files = true
 
 [tool.ruff]
 target-version = "py312"

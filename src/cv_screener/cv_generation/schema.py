@@ -37,12 +37,11 @@ class EducationEntry(BaseModel):
     graduation_year: int = Field(ge=1900, le=2100)
 
 
-class CVProfile(BaseModel):
-    """Full validated YAML payload for a generated CV."""
+class CVProfileDraft(BaseModel):
+    """Validated CV payload before assigning the canonical candidate ID."""
 
     model_config = ConfigDict(extra="forbid")
 
-    candidate_id: UUID
     full_name: str = Field(min_length=1)
     email: str = Field(min_length=1)
     phone: str = Field(min_length=1)
@@ -51,3 +50,9 @@ class CVProfile(BaseModel):
     skills: list[str] = Field(min_length=1)
     experience: list[ExperienceEntry] = Field(min_length=1)
     education: list[EducationEntry] = Field(min_length=1)
+
+
+class CVProfile(CVProfileDraft):
+    """Full validated YAML payload for a generated CV."""
+
+    candidate_id: UUID

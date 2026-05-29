@@ -1,17 +1,36 @@
 """Typer CLI entrypoints for the CV screener package."""
 
+import sys
 from pathlib import Path
+from typing import Annotated
 
 import typer
+from loguru import logger
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
-from cv_screener.cv_generation.generator import CVGenerationService
+from cv_screener.config import GenerationSettings
+from cv_screener.cv_generation.generator import (
+    CVGenerationService,
+    GenerationMode,
+    LogVerbosity,
+    ProgressMode,
+)
+from cv_screener.cv_generation.sources import (
+    OpenAICVProfileSource,
+    SeededCVProfileSource,
+)
 
 app = typer.Typer(help="CV screener CLI.")
 
 
 @app.command("generate-cvs")
 def generate_cvs(
-    count: int = typer.Option(3, min=1, max=30, help="Number of YAML CVs to generate."),
+    count: int = typer.Option(3, min=1, max=50, help="Number of YAML CVs to generate."),
+    mode: Annotated[
+        GenerationMode,
+        typer.Option(help="Generation mode: seeded local samples or LLM-backed generation."),
+    ] = GenerationMode.SEEDED,
     output_dir: Path = typer.Option(
         Path("data/cvs_contents"),
         file_okay=False,
@@ -19,10 +38,39 @@ def generate_cvs(
         writable=True,
         help="Directory where YAML CVs will be written.",
     ),
+    log_level: Annotated[
+        LogVerbosity,
+        typer.Option(help="Log level during generation."),
+    ] = LogVerbosity.INFO,
+    progress: Annotated[
+        ProgressMode,
+        typer.Option(help="Progress bar mode."),
+    ] = ProgressMode.AUTO,
 ) -> None:
     """Generate validated CV content YAML files."""
-    service = CVGenerationService(output_dir=output_dir)
-    written_files = service.generate(count=count)
+    console = build_console()
+    configure_logging(console=console, log_level=log_level)
+    profile_source = SeededCVProfileSource()
+    if mode is GenerationMode.LLM:
+        profile_source = OpenAICVProfileSource(GenerationSettings())
+    service = CVGenerationService(output_dir=output_dir, profile_source=profile_source)
+    progress_enabled = should_use_progress(progress=progress, log_level=log_level)
+    if progress_enabled:
+        console.print()
+        with Progress(
+            TextColumn("Generating CVs"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("({task.completed:.0f}/{task.total:.0f} generated)"),
+            console=console,
+        ) as progress_bar:
+            task_id = progress_bar.add_task("generate-cvs", total=count)
+            written_files = service.generate(
+                count=count,
+                progress_callback=lambda _current, _total: progress_bar.advance(task_id, 1),
+            )
+    else:
+        written_files = service.generate(count=count)
     typer.echo(f"Generated {len(written_files)} CV YAML files in {output_dir}.")
 
 
@@ -38,9 +86,33 @@ def validate_cvs(
     ),
 ) -> None:
     """Validate generated CV content YAML files."""
+    configure_logging(console=build_console(), log_level=LogVerbosity.INFO)
     service = CVGenerationService(output_dir=input_dir)
     validated_files = service.validate_directory(input_dir)
     typer.echo(f"Validated {len(validated_files)} CV YAML files in {input_dir}.")
+
+
+def build_console() -> Console:
+    """Create the stderr-backed console used by the CLI."""
+    return Console(file=sys.stderr)
+
+
+def configure_logging(*, console: Console, log_level: LogVerbosity) -> None:
+    """Configure Loguru output for CLI commands."""
+    logger.remove()
+    logger.add(
+        lambda message: console.print(message, end=""),
+        level=log_level.value.upper(),
+    )
+
+
+def should_use_progress(*, progress: ProgressMode, log_level: LogVerbosity) -> bool:
+    """Resolve whether the CLI should render a progress bar."""
+    if progress is ProgressMode.ON:
+        return log_level not in {LogVerbosity.TRACE, LogVerbosity.DEBUG}
+    if progress is ProgressMode.OFF:
+        return False
+    return sys.stderr.isatty() and log_level not in {LogVerbosity.TRACE, LogVerbosity.DEBUG}
 
 
 def main() -> None:

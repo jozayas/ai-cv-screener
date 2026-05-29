@@ -118,17 +118,9 @@ Create a `.env` file from `.env.example`.
 OPENAI_BASE_URL=http://localhost:11434/v1
 OPENAI_API_KEY=ollama
 
-GENERATION_MODEL=llama3.1:8b
-CHAT_MODEL=llama3.1:8b
-EMBEDDING_MODEL=nomic-embed-text
-
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=cv_chunks
-
-SEMANTIC_TOP_K=12
-BM25_TOP_K=12
-FUSION_TOP_K=10
-RERANK_TOP_K=5
+GENERATION_MODEL=gemma3:12b
+GENERATION_TEMPERATURE=0.8
+GENERATION_MAX_RETRIES=2
 ```
 
 ## Local Setup
@@ -145,17 +137,24 @@ Install dependencies:
 uv sync
 ```
 
+Run type checking:
+
+```bash
+uv run pyrefly check
+```
+
 Start local infrastructure:
 
 ```bash
-docker compose up -d qdrant ollama
+docker compose up -d ollama
 ```
 
-Pull local models if using Ollama:
+The compose file pins the Ollama image version for reproducible local setup.
+
+Pull the generation model into Ollama:
 
 ```bash
-ollama pull llama3.1:8b
-ollama pull nomic-embed-text
+docker compose --profile setup up ollama-pull-models
 ```
 
 ## CLI Usage
@@ -166,6 +165,12 @@ Generate fake CV YAML profiles:
 
 ```bash
 uv run cv-screener generate-cvs --count 30 --output-dir data/cvs_contents
+```
+
+Generate fake CV YAML profiles with the local model:
+
+```bash
+uv run cv-screener generate-cvs --count 3 --mode llm --output-dir data/cvs_contents
 ```
 
 Validate generated YAML files:
