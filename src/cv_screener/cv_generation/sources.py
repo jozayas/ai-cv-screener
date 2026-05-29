@@ -1,15 +1,14 @@
 """Draft CV content sources for local and model-backed generation."""
 
 import json
-import re
 from typing import Protocol
 
 from loguru import logger
-from openai import OpenAI
-from openai.types.chat import ChatCompletionMessageParam
 from pydantic import ValidationError
 
 from cv_screener.config import GenerationSettings
+from cv_screener.cv_generation.llm.client import OpenAICVGenerationClient
+from cv_screener.cv_generation.llm.parsing import parse_json_payload
 from cv_screener.cv_generation.schema import CVProfileDraft
 from cv_screener.cv_generation.seed_data import SEED_PROFILES
 
@@ -35,70 +34,13 @@ class SeededCVProfileSource:
         return CVProfileDraft.model_validate(SEED_PROFILES[index % len(SEED_PROFILES)])
 
 
-def parse_json_payload(content: str) -> dict:
-    """Parse a best-effort JSON object from a model response."""
-    normalized = content.strip()
-    if normalized.startswith("```"):
-        normalized = normalized.strip("`")
-        normalized = normalized.removeprefix("json").strip()
-    json_start = normalized.find("{")
-    json_end = normalized.rfind("}")
-    if json_start != -1 and json_end != -1:
-        normalized = normalized[json_start : json_end + 1]
-    normalized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", normalized)
-    normalized = normalized.replace("\r", " ").replace("\n", " ").replace("\t", " ")
-    return json.loads(normalized)
-
-
-def build_generation_messages(
-    *,
-    last_error: str | None = None,
-) -> list[ChatCompletionMessageParam]:
-    """Build the prompt messages for a single CV generation call."""
-    messages: list[ChatCompletionMessageParam] = [
-        {
-            "role": "system",
-            "content": (
-                "You generate realistic fake technical CVs. "
-                "Return JSON only. Do not include markdown fences. "
-                "Keep candidates varied in seniority, domain, education, and skills. "
-                "Allow the CV content to be written in different natural languages. "
-                "Do not include analysis, reasoning, or explanatory text. "
-                "All string values must be valid JSON strings on a single line."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Generate one fake technical CV as JSON that matches this schema:\n"
-                f"{json.dumps(CVProfileDraft.model_json_schema(), indent=2)}"
-            ),
-        },
-    ]
-    if last_error is not None:
-        messages.append(
-            {
-                "role": "user",
-                "content": (
-                    "The previous response was invalid. "
-                    f"Validation or parse error: {last_error}. "
-                    "Return only one corrected JSON object."
-                ),
-            }
-        )
-    return messages
-
-
 class OpenAICVProfileSource:
     """OpenAI-compatible source for model-backed CV generation."""
 
     def __init__(self, settings: GenerationSettings) -> None:
         """Initialize the OpenAI-compatible client."""
         self.settings = settings
-        self.client = OpenAI(
-            base_url=settings.openai_base_url,
-            api_key=settings.openai_api_key,
-        )
+        self.client = OpenAICVGenerationClient(settings)
 
     def generate_draft(self, *, index: int) -> CVProfileDraft:
         """Generate a draft CV payload from the configured model."""
@@ -112,15 +54,7 @@ class OpenAICVProfileSource:
                 max_attempts=self.settings.generation_max_retries + 1,
                 model=self.settings.generation_model,
             )
-            completion = self.client.chat.completions.create(
-                model=self.settings.generation_model,
-                temperature=self.settings.generation_temperature,
-                messages=build_generation_messages(last_error=last_error),
-            )
-            content = completion.choices[0].message.content
-            if not content:
-                message = "model returned an empty completion"
-                raise ValueError(message)
+            content = self.client.request_draft(last_error=last_error)
             try:
                 payload = parse_json_payload(content)
                 logger.debug(
