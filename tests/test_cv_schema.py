@@ -5,14 +5,14 @@ import pytest
 from pydantic import ValidationError
 
 from cv_screener.cli import should_use_progress
-from cv_screener.cv_generation.generator import (
+from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     LogVerbosity,
     ProgressMode,
 )
-from cv_screener.cv_generation.schema import CVProfile, CVProfileDraft
-from cv_screener.cv_generation.sources import parse_json_payload
-from cv_screener.cv_generation.yaml_io import load_cv_profile
+from cv_screener.cv_generation.content.llm.parsing import parse_json_payload
+from cv_screener.cv_generation.content.schema import CVProfile, CVProfileDraft
+from cv_screener.cv_generation.content.yaml_io import load_cv_profile
 
 
 def test_cv_profile_requires_valid_candidate_id() -> None:
