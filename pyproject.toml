@@ -1,0 +1,17 @@
+[project]
+name = "cv-screener"
+version = "0.1.0"
+description = "Local-first prototype for screening fake CVs with a hybrid RAG pipeline."
+readme = "README.md"
+authors = [
+    { name = "jozayas", email = "147546369+jozayas@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+cv-screener = "cv_screener:main"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
