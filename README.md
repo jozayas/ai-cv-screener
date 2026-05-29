@@ -103,7 +103,7 @@ The application generates realistic fake CVs as PDFs, parses and ingests them, a
 │   └── test_fusion.py
 │
 └── data/
-    ├── cvs_yaml/
+    ├── cvs_contents/
     ├── cvs_pdf/
     ├── parsed/
     ├── indexes/
@@ -165,13 +165,13 @@ The project exposes a Typer CLI through the `cv-screener` command.
 Generate fake CV YAML profiles:
 
 ```bash
-uv run cv-screener generate-cvs --count 30
+uv run cv-screener generate-cvs --count 30 --output-dir data/cvs_contents
 ```
 
 Validate generated YAML files:
 
 ```bash
-uv run cv-screener validate-cvs
+uv run cv-screener validate-cvs --input-dir data/cvs_contents
 ```
 
 Render CV PDFs:

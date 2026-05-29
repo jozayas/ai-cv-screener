@@ -7,10 +7,60 @@ authors = [
     { name = "jozayas", email = "147546369+jozayas@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "loguru>=0.7.3",
+    "pydantic>=2.11.5",
+    "pyyaml>=6.0.2",
+    "typer>=0.16.0",
+]
 
 [project.scripts]
 cv-screener = "cv_screener:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "ruff>=0.11.13",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["ALL"]
+fixable = ["ALL"]
+ignore = [
+    "COM812",
+    "COM819",
+    "D203",
+    "D206",
+    "D213",
+    "D300",
+    "E111",
+    "E114",
+    "E117",
+    "E501",
+    "ISC002",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "Q004",
+    "TRY003",
+    "W191",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "PLR2004", "S101"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]
