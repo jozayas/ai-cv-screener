@@ -1,3 +1,4 @@
+import importlib
 from pathlib import Path
 from uuid import UUID
 
@@ -5,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
-from cv_screener import cli
 from cv_screener.cli import ColorMode, LogLevel, should_use_color, should_use_progress
+from cv_screener.cli.app import app as cli_app
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
 )
@@ -15,6 +16,8 @@ from cv_screener.cv_generation.content.schema import CVProfile, CVProfileDraft
 from cv_screener.cv_generation.content.yaml_io import load_cv_profile
 
 runner = CliRunner()
+cli_app_module = importlib.import_module("cv_screener.cli.app")
+cli_generation = importlib.import_module("cv_screener.cli.generation")
 
 
 def test_cv_profile_requires_valid_candidate_id() -> None:
@@ -226,6 +229,14 @@ def test_should_use_color_honors_mode_and_environment(monkeypatch: pytest.Monkey
     assert not should_use_color(ColorMode.AUTO)
 
 
+def test_root_command_without_subcommand_shows_help() -> None:
+    result = runner.invoke(cli_app, [])
+
+    assert result.exit_code == 2
+    assert "Usage:" in result.stdout
+    assert "generate-cv-content" in result.stdout
+
+
 def test_generate_cv_content_command_generates_yaml_only(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -243,9 +254,9 @@ def test_generate_cv_content_command_generates_yaml_only(
             assert progress_callback is None
             return generated_paths
 
-    monkeypatch.setattr(cli, "CVGenerationService", FakeGenerationService)
+    monkeypatch.setattr(cli_generation, "CVGenerationService", FakeGenerationService)
     monkeypatch.setattr(
-        cli,
+        cli_generation,
         "should_use_progress",
         lambda **kwargs: progress_calls.append(
             (kwargs["no_progress"], kwargs["log_level"])
@@ -254,7 +265,7 @@ def test_generate_cv_content_command_generates_yaml_only(
     )
 
     result = runner.invoke(
-        cli.app,
+        cli_app,
         [
             "--no-progress",
             "--color",
@@ -300,12 +311,12 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
             calls.append(("render", content_dir, pdf_dir))
             return rendered_paths
 
-    monkeypatch.setattr(cli, "CVGenerationService", FakeGenerationService)
-    monkeypatch.setattr(cli, "PDFRenderingService", FakePDFRenderingService)
-    monkeypatch.setattr(cli, "should_use_progress", lambda **_: False)
+    monkeypatch.setattr(cli_generation, "CVGenerationService", FakeGenerationService)
+    monkeypatch.setattr(cli_app_module, "PDFRenderingService", FakePDFRenderingService)
+    monkeypatch.setattr(cli_generation, "should_use_progress", lambda **_: False)
 
     result = runner.invoke(
-        cli.app,
+        cli_app,
         [
             "--no-progress",
             "--color",
