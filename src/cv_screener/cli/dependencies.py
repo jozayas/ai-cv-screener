@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from cv_screener.cv_generation.pdf.templates import TemplateId
-    from cv_screener.ingestion import IngestionSummary
+    from cv_screener.ingestion.schema import IngestionSummary
     from cv_screener.retrieval.schema import RetrievedChunk
 
 
@@ -59,12 +59,12 @@ def build_pdf_rendering_service(
 
 def build_cv_ingestion_service(*, pdf_dir: Path) -> CVIngestionServiceProtocol:
     """Build the ingestion service lazily to keep CLI import overhead low."""
-    module = import_module("cv_screener.ingestion")
+    module = import_module("cv_screener.ingestion.ingest")
     service = module.CVIngestionService(pdf_dir=pdf_dir)
     return cast("CVIngestionServiceProtocol", service)
 
 
 def build_hybrid_retriever() -> HybridRetrieverProtocol:
     """Build the hybrid retriever lazily to keep CLI help fast."""
-    module = import_module("cv_screener.retrieval")
+    module = import_module("cv_screener.retrieval.hybrid")
     return cast("HybridRetrieverProtocol", module.HybridRetriever())

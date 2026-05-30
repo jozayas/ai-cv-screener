@@ -1,6 +1,4 @@
 """Orchestration for parsing, chunking, and indexing rendered CV PDFs."""
-
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -9,6 +7,7 @@ from cv_screener.ingestion.chunking.schema import Chunk
 from cv_screener.ingestion.indexing import QdrantChunkIndexer
 from cv_screener.ingestion.parser import parse_directory
 from cv_screener.ingestion.parsing.schema import ParsedCV
+from cv_screener.ingestion.schema import IngestionSummary
 
 
 class CVDirectoryParser(Protocol):
@@ -32,15 +31,6 @@ class ChunkIndexer(Protocol):
 
     def index_chunks(self, chunks: list[Chunk], *, reset: bool = False) -> None:
         """Index chunks, optionally recreating the target collection first."""
-
-
-@dataclass(frozen=True)
-class IngestionSummary:
-    """Stable summary returned by the ingest orchestration."""
-
-    pdf_count: int
-    chunk_count: int
-    reset: bool
 
 
 class CVIngestionService:

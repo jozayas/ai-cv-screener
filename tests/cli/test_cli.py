@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 
 from cv_screener.cli import ColorMode, LogLevel, should_use_color, should_use_progress
 from cv_screener.cli.app import app as cli_app
-from cv_screener.ingestion import IngestionSummary
+from cv_screener.ingestion.schema import IngestionSummary
 
 runner = CliRunner()
 cli_app_module = importlib.import_module("cv_screener.cli.app")

@@ -17,7 +17,7 @@ from cv_screener.cv_generation.content.generator import (
     GenerationMode,
 )
 from cv_screener.cv_generation.pdf.templates import TemplateId
-from cv_screener.ingestion import IngestionSummary
+from cv_screener.ingestion.schema import IngestionSummary
 from cv_screener.retrieval.schema import RetrievedChunk
 
 
