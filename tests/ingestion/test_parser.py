@@ -7,7 +7,7 @@ import pytest
 from cv_screener.cv_generation.content.generator import CVGenerationService
 from cv_screener.cv_generation.pdf.renderer import PDFRenderingService
 from cv_screener.ingestion.parser import parse_directory, parse_pdf
-from cv_screener.ingestion.schema import ParsedCV
+from cv_screener.ingestion.parsing.schema import ParsedCV
 
 
 @pytest.fixture

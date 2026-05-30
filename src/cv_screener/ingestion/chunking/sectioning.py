@@ -5,7 +5,7 @@ from fastembed import TextEmbedding
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 from cv_screener.ingestion.chunking.common import _HEADER_SECTION
-from cv_screener.ingestion.schema import ChunkConfig
+from cv_screener.ingestion.chunking.schema import ChunkConfig
 
 MARKDOWN_SPLITTER = MarkdownHeaderTextSplitter(
     headers_to_split_on=[("##", "section")],

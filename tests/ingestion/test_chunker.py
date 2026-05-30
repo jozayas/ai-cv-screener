@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from cv_screener.ingestion import chunker
-from cv_screener.ingestion.schema import ChunkConfig, ParsedCV, ParsedPage
+from cv_screener.ingestion.chunking import chunker
+from cv_screener.ingestion.chunking.schema import ChunkConfig
+from cv_screener.ingestion.parsing.schema import ParsedCV, ParsedPage
 
 
 def _make_cv(

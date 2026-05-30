@@ -6,8 +6,8 @@ import numpy as np
 from fastembed import TextEmbedding
 
 from cv_screener.ingestion.chunking.common import _SENTENCE_PATTERN
+from cv_screener.ingestion.chunking.schema import ChunkConfig
 from cv_screener.ingestion.chunking.sectioning import cosine_similarity
-from cv_screener.ingestion.schema import ChunkConfig
 
 
 def split_semantic_units(text: str) -> list[str]:

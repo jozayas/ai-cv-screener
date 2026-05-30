@@ -6,7 +6,7 @@ from typing import Any
 import pymupdf4llm
 from loguru import logger
 
-from cv_screener.ingestion.schema import ParsedCV, ParsedPage
+from cv_screener.ingestion.parsing.schema import ParsedCV, ParsedPage
 
 
 def _extract_page_chunks(pdf_path: Path) -> list[dict[str, Any]]:

@@ -1,4 +1,13 @@
 services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.1
+    container_name: cv-screener-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
   ollama:
     image: ollama/ollama:0.24.0
     container_name: cv-screener-ollama
@@ -28,4 +37,5 @@ services:
         ollama pull ${GENERATION_MODEL:-gemma3:12b}
 
 volumes:
+  qdrant_data:
   ollama_data:

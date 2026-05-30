@@ -17,7 +17,8 @@ from cv_screener.ingestion.chunking.common import (
     _UNIVERSITY_LABEL,
     dedupe,
 )
-from cv_screener.ingestion.schema import ChunkConfig, ParsedCV
+from cv_screener.ingestion.chunking.schema import ChunkConfig
+from cv_screener.ingestion.parsing.schema import ParsedCV
 
 if TYPE_CHECKING:
     from phonenumbers.phonenumbermatcher import PhoneNumberMatch

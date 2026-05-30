@@ -19,6 +19,7 @@ dependencies = [
     "pydantic>=2.11.5",
     "pydantic-settings>=2.10.1",
     "pymupdf4llm>=1.27.2.3",
+    "qdrant-client>=1.18.0",
     "pyyaml>=6.0.2",
     "rapidfuzz>=3.14.5",
     "rich>=14.1.0",
@@ -82,6 +83,11 @@ extend-immutable-calls = ["typer.Option"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that exercise live local services",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]

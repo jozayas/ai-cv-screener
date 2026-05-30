@@ -4,15 +4,15 @@ from dataclasses import dataclass
 
 from loguru import logger
 
-from cv_screener.ingestion.chunking import (
+from cv_screener.ingestion.chunking.metadata import MetadataExtractor
+from cv_screener.ingestion.chunking.schema import Chunk, ChunkConfig
+from cv_screener.ingestion.chunking.sectioning import (
     MARKDOWN_SPLITTER,
-    MetadataExtractor,
-    SectionChunkRequest,
     SectionClassifier,
-    SemanticChunker,
     resolve_section,
 )
-from cv_screener.ingestion.schema import Chunk, ChunkConfig, ParsedCV
+from cv_screener.ingestion.chunking.semantic import SectionChunkRequest, SemanticChunker
+from cv_screener.ingestion.parsing.schema import ParsedCV
 
 
 @dataclass(frozen=True)
@@ -144,6 +144,3 @@ def chunk_cvs(cvs: list[ParsedCV], config: ChunkConfig | None = None) -> list[Ch
     all_chunks = [chunk for cv in cvs for chunk in chunk_cv(cv, config=resolved_config)]
     logger.info("Chunked all CVs", total_cvs=len(cvs), total_chunks=len(all_chunks))
     return all_chunks
-
-
-__all__ = ["MetadataExtractor", "chunk_cv", "chunk_cvs"]
