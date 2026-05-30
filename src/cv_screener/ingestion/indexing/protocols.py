@@ -1,13 +1,24 @@
 """Typing protocols for indexer dependencies."""
 
-from collections.abc import Iterable
-from typing import Protocol
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from qdrant_client.http.models import PointStruct, VectorParams
 
 
 class EmbeddingModel(Protocol):
     """Protocol for embedding models used by the indexer."""
 
-    def embed(self, texts: list[str]) -> Iterable[Iterable[float]]:
+    def embed(
+        self,
+        documents: str | Iterable[str],
+        batch_size: int = 256,
+        parallel: int | None = None,
+    ) -> Iterable[Iterable[float]]:
         """Embed a batch of texts."""
         ...
 
@@ -22,22 +33,25 @@ class QdrantClientProtocol(Protocol):
     def create_collection(
         self,
         collection_name: str,
-        vectors_config: object = None,
-        **kwargs: object,
-    ) -> object:
+        vectors_config: VectorParams | dict[str, VectorParams] | None = None,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> bool:
         """Create a collection with vector configuration."""
+        ...
 
-    def delete_collection(self, collection_name: str, **kwargs: object) -> object:
+    def delete_collection(self, collection_name: str, **kwargs: Any) -> bool:  # noqa: ANN401
         """Delete an existing collection."""
+        ...
 
     def upload_points(  # noqa: PLR0913
         self,
         collection_name: str,
-        points: object,
+        points: Iterable[PointStruct],
         *,
         batch_size: int = 64,
         parallel: int = 1,
         max_retries: int = 3,
         wait: bool = True,
-    ) -> object:
+    ) -> None:
         """Upload points into a collection."""
+        ...

@@ -1,7 +1,5 @@
 """Qdrant-backed chunk indexing service."""
 
-from typing import TYPE_CHECKING, cast
-
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient, models
 
@@ -12,13 +10,11 @@ from cv_screener.ingestion.indexing.ids import (
 )
 from cv_screener.ingestion.indexing.payloads import build_payload
 from cv_screener.ingestion.indexing.points import build_points
+from cv_screener.ingestion.indexing.protocols import (
+    EmbeddingModel,
+    QdrantClientProtocol,
+)
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
-
-if TYPE_CHECKING:
-    from cv_screener.ingestion.indexing.protocols import (
-        EmbeddingModel,
-        QdrantClientProtocol,
-    )
 
 _DISTANCE_BY_NAME = {
     "cosine": models.Distance.COSINE,
@@ -31,27 +27,25 @@ _DISTANCE_BY_NAME = {
 class QdrantChunkIndexer:
     """Index CV chunks into a Qdrant collection."""
 
+    config: QdrantIndexConfig
+    _client: QdrantClientProtocol
+    _embedding_model: EmbeddingModel
+
     def __init__(
         self,
         config: QdrantIndexConfig | None = None,
         *,
-        client: object | None = None,
-        embedding_model: object | None = None,
+        client: QdrantClientProtocol | None = None,
+        embedding_model: EmbeddingModel | None = None,
     ) -> None:
         """Bind Qdrant and embedding dependencies to the indexing config."""
         self.config = config or QdrantIndexConfig()
-        self._client = cast(
-            "QdrantClientProtocol",
-            client
-            or QdrantClient(
-                url=self.config.url,
-                check_compatibility=self.config.check_compatibility,
-            ),
+        self._client = client or QdrantClient(
+            url=self.config.url,
+            check_compatibility=self.config.check_compatibility,
         )
-        self._embedding_model = cast(
-            "EmbeddingModel",
-            embedding_model
-            or TextEmbedding(model_name=self.config.embedding_model_name),
+        self._embedding_model = embedding_model or TextEmbedding(
+            model_name=self.config.embedding_model_name,
         )
 
     def document_id_for_chunk(self, chunk: Chunk) -> str:
@@ -70,11 +64,11 @@ class QdrantChunkIndexer:
         """Create the target collection if needed."""
         exists = self._client.collection_exists(self.config.collection_name)
         if exists and reset:
-            self._client.delete_collection(self.config.collection_name)
+            _deleted = self._client.delete_collection(self.config.collection_name)
             exists = False
         if exists:
             return
-        self._client.create_collection(
+        _created = self._client.create_collection(
             collection_name=self.config.collection_name,
             vectors_config=models.VectorParams(
                 size=self.config.vector_size,

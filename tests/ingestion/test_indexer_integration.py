@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
@@ -7,9 +10,19 @@ from cv_screener.ingestion.chunking.schema import Chunk
 from cv_screener.ingestion.indexing.qdrant import QdrantChunkIndexer
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 
 class FakeEmbeddingModel:
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def embed(
+        self,
+        documents: str | Iterable[str],
+        batch_size: int = 256,
+        parallel: int | None = None,
+    ) -> list[list[float]]:
+        del batch_size, parallel
+        texts = [documents] if isinstance(documents, str) else list(documents)
         assert len(texts) == 1
         return [[0.1, 0.2, 0.3]]
 

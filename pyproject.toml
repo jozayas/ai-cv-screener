@@ -32,6 +32,7 @@ cv-screener = "cv_screener:main"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.39.6",
     "pre-commit>=4.0.0",
     "pyrefly>=0.34.0",
     "pytest>=8.4.0",
