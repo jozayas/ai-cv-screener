@@ -7,18 +7,74 @@ authors = [
     { name = "jozayas", email = "147546369+jozayas@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
-
-[dependency-groups]
-dev = [
-    "pre-commit>=4.0.0",
-    "pyrefly>=1.0.0",
-    "pytest>=9.0.0",
-    "ruff>=0.15.0",
+dependencies = [
+    "jinja2>=3.1.6",
+    "loguru>=0.7.3",
+    "openai>=1.82.1",
+    "pydantic>=2.11.5",
+    "pydantic-settings>=2.10.1",
+    "pyyaml>=6.0.2",
+    "rich>=14.1.0",
+    "typer>=0.16.0",
+    "weasyprint>=68.0",
 ]
 
 [project.scripts]
 cv-screener = "cv_screener:main"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pyrefly>=0.34.0",
+    "pytest>=8.4.0",
+    "ruff>=0.11.13",
+]
+
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+search-path = ["src"]
+python-version = "3.12"
+python-platform = "linux"
+use-ignore-files = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["ALL"]
+fixable = ["ALL"]
+ignore = [
+    "COM812",
+    "COM819",
+    "D203",
+    "D206",
+    "D213",
+    "D300",
+    "E111",
+    "E114",
+    "E117",
+    "E501",
+    "ISC002",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "Q004",
+    "TRY003",
+    "W191",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "PLR2004", "S101"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]

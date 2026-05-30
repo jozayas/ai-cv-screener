@@ -1,0 +1,93 @@
+{% import "macros.html.j2" as macros %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ profile.full_name }} - CV</title>
+    <style>
+      @page { size: A4; margin: 0; }
+      body {
+        color: #1c252d;
+        font-family: "Helvetica", "Arial", sans-serif;
+        font-size: 9.25pt;
+        line-height: 1.34;
+        margin: 0;
+      }
+      h1, h2, h3, p { margin: 0; }
+      .layout {
+        display: grid;
+        grid-template-columns: 62mm 1fr;
+        min-height: 297mm;
+      }
+      .sidebar {
+        background: #f0ece7;
+        box-sizing: border-box;
+        min-height: 297mm;
+        padding: 12mm 8mm 12mm 11mm;
+      }
+      .identity {
+        margin-bottom: 0.68rem;
+      }
+      .identity h1 {
+        color: #2d2520;
+        font-size: 18pt;
+        line-height: 1.08;
+        margin-bottom: 0.2rem;
+      }
+      .identity p {
+        color: #5c5048;
+        font-size: 8.4pt;
+      }
+      .contact { margin-top: 0.24rem; }
+      .main-column {
+        border-top: 2px solid #714b36;
+        margin: 12mm 12mm 12mm 7mm;
+        padding-top: 0.45rem;
+      }
+      .sidebar .section {
+        border-top: 0.75px solid #c8b9ae;
+        padding-top: 0.42rem;
+      }
+      .section { margin-top: 0.55rem; }
+      .section:first-child { margin-top: 0; }
+      h2 {
+        color: #714b36;
+        font-size: 9.4pt;
+        letter-spacing: 0.45px;
+        margin-bottom: 0.28rem;
+        text-transform: uppercase;
+      }
+      h3 { font-size: 9.5pt; }
+      .entry { margin-bottom: 0.48rem; }
+      .entry-header {
+        align-items: baseline;
+        display: grid;
+        gap: 0.5rem;
+        grid-template-columns: 1fr auto;
+      }
+      .meta, .date-range, .summary, .technologies, li { color: #283542; }
+      .date-range { font-size: 8pt; white-space: nowrap; }
+      ul { margin: 0.18rem 0 0 0.8rem; padding: 0; }
+      .tag-list { list-style: square; margin-left: 0.8rem; }
+    </style>
+  </head>
+  <body>
+    <main class="layout" data-template-name="{{ template_name }}">
+      <aside class="sidebar">
+        <header class="identity">
+          <h1>{{ profile.full_name }}</h1>
+          <p>{{ profile.location }}</p>
+          <p class="contact">{{ profile.email }}<br>{{ profile.phone }}</p>
+        </header>
+        {% for section in sidebar_sections %}
+          {{ macros.render_section(section) }}
+        {% endfor %}
+      </aside>
+      <section class="main-column">
+        {% for section in main_sections %}
+          {{ macros.render_section(section) }}
+        {% endfor %}
+      </section>
+    </main>
+  </body>
+</html>

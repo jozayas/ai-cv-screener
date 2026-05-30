@@ -60,14 +60,15 @@ YAML CV generation
 Use Typer. Target commands:
 
 ```bash
-python -m app.cli generate-cvs --count 30
-python -m app.cli validate-cvs
-python -m app.cli render-pdfs
-python -m app.cli ingest --reset
-python -m app.cli query "Who has Python experience?"
-python -m app.cli eval-retrieval
-python -m app.cli eval-rag
-python -m app.cli serve
+uv run cv-screener generate-content --count 30
+uv run cv-screener generate-cvs --count 30
+uv run cv-screener validate data/cvs_contents
+uv run cv-screener render data/cvs_contents
+uv run cv-screener ingest --reset
+uv run cv-screener query "Who has Python experience?"
+uv run cv-screener eval-retrieval
+uv run cv-screener eval-rag
+uv run cv-screener serve
 ```
 
 ## Core Requirements
