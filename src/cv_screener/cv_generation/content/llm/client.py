@@ -14,7 +14,7 @@ class OpenAICVGenerationClient:
         self.settings = settings
         self.client = OpenAI(
             base_url=settings.openai_base_url,
-            api_key=settings.openai_api_key,
+            api_key=settings.openai_api_key.get_secret_value(),
         )
 
     def request_draft(self, *, last_error: str | None = None) -> str:

@@ -1,6 +1,6 @@
 """Environment-backed configuration for the CV screener."""
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +14,7 @@ class GenerationSettings(BaseSettings):
     )
 
     openai_base_url: str = Field(default="http://localhost:11434/v1")
-    openai_api_key: str = Field(default="ollama")
+    openai_api_key: SecretStr = Field(default=SecretStr("ollama"))
     generation_model: str = Field(default="gemma3:12b")
     generation_temperature: float = Field(default=0.8, ge=0, le=2)
     generation_max_retries: int = Field(default=2, ge=0, le=5)
@@ -31,3 +31,34 @@ class QdrantSettings(BaseSettings):
 
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_check_compatibility: bool = Field(default=False)
+
+
+class RAGModelSettings(BaseSettings):
+    """Settings for the RAG chat runtime over an OpenAI-compatible endpoint."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    openai_base_url: str = Field(default="http://localhost:11434/v1")
+    openai_api_key: SecretStr = Field(default=SecretStr("ollama"))
+    rag_model: str = Field(default="gemma3:12b")
+    rag_temperature: float = Field(default=0, ge=0, le=2)
+    rag_max_retries: int = Field(default=2, ge=0, le=5)
+
+
+class LangSmithSettings(BaseSettings):
+    """Optional LangSmith tracing configuration for the RAG runtime."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    langsmith_tracing: bool = Field(default=False)
+    langsmith_project: str = Field(default="cv-screener")
+    langsmith_api_key: SecretStr | None = Field(default=None)
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com")
