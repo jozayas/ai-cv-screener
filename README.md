@@ -143,6 +143,12 @@ Run type checking:
 uv run pyrefly check
 ```
 
+Install Git hooks:
+
+```bash
+uv run pre-commit install
+```
+
 Start local infrastructure:
 
 ```bash
@@ -225,6 +231,22 @@ Run RAG evaluation:
 
 ```bash
 uv run cv-screener eval-rag
+```
+
+## Quality Checks
+
+Run the same checks as CI locally:
+
+```bash
+uv run ruff check .
+uv run pyrefly check
+uv run pytest
+```
+
+Run all pre-commit hooks manually:
+
+```bash
+uv run pre-commit run --all-files
 ```
 
 ## Example Questions
