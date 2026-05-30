@@ -1,0 +1,77 @@
+{% import "macros.html.j2" as macros %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ profile.full_name }} - CV</title>
+    <style>
+      @page { size: A4; margin: 1.4cm; }
+      body {
+        color: #1c252d;
+        font-family: "Helvetica", "Arial", sans-serif;
+        font-size: 9.8pt;
+        line-height: 1.45;
+        margin: 0;
+      }
+      h1, h2, h3, p { margin: 0; }
+      .resume { display: block; }
+      .header {
+        align-items: end;
+        border-bottom: 1.5px solid #b8c4ce;
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1.15fr 1fr;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.55rem;
+      }
+      .header h1 { font-size: 23pt; letter-spacing: 0; margin-bottom: 0.12rem; }
+      .subtitle { color: #52616c; font-size: 9.4pt; }
+      .contact {
+        color: #52616c;
+        font-size: 8.8pt;
+        line-height: 1.4;
+        text-align: right;
+      }
+      .section { margin-top: 0.62rem; }
+      h2 {
+        border-bottom: 0.75px solid #ccd5dd;
+        font-size: 9.8pt;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.3rem;
+        padding-bottom: 0.12rem;
+        text-transform: uppercase;
+      }
+      h3 { font-size: 9.9pt; }
+      .entry { margin-bottom: 0.48rem; }
+      .entry-header {
+        align-items: baseline;
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: 1fr auto;
+      }
+      .meta, .date-range, .technologies, .summary, li { color: #263d4f; }
+      .date-range { font-size: 8.7pt; white-space: nowrap; }
+      ul { margin: 0.2rem 0 0 0.85rem; padding: 0; }
+      .tag-list {
+        column-gap: 1.2rem;
+        columns: 2;
+        list-style: square;
+        margin-left: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="resume" data-template-name="{{ template_name }}">
+      <header class="header">
+        <div>
+          <h1>{{ profile.full_name }}</h1>
+          <p class="subtitle">{{ profile.location }}</p>
+        </div>
+        <p class="contact">{{ profile.email }}<br>{{ profile.phone }}</p>
+      </header>
+      {% for section in main_sections %}
+        {{ macros.render_section(section) }}
+      {% endfor %}
+    </main>
+  </body>
+</html>

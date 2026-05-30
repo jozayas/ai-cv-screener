@@ -10,16 +10,17 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from cv_screener.config import GenerationSettings
-from cv_screener.cv_generation.generator import (
+from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     GenerationMode,
     LogVerbosity,
     ProgressMode,
 )
-from cv_screener.cv_generation.sources import (
+from cv_screener.cv_generation.content.sources import (
     OpenAICVProfileSource,
     SeededCVProfileSource,
 )
+from cv_screener.cv_generation.pdf import PDFRenderingService
 
 app = typer.Typer(help="CV screener CLI.")
 
@@ -90,6 +91,31 @@ def validate_cvs(
     service = CVGenerationService(output_dir=input_dir)
     validated_files = service.validate_directory(input_dir)
     typer.echo(f"Validated {len(validated_files)} CV YAML files in {input_dir}.")
+
+
+@app.command("render-pdfs")
+def render_pdfs(
+    input_dir: Path = typer.Option(
+        Path("data/cvs_contents"),
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        help="Directory containing YAML CV files.",
+    ),
+    output_dir: Path = typer.Option(
+        Path("data/cv_pdfs"),
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        help="Directory where PDF CV files will be written.",
+    ),
+) -> None:
+    """Render generated YAML CV files into PDFs."""
+    configure_logging(console=build_console(), log_level=LogVerbosity.INFO)
+    service = PDFRenderingService(input_dir=input_dir, output_dir=output_dir)
+    rendered_files = service.render_directory()
+    typer.echo(f"Rendered {len(rendered_files)} CV PDFs in {output_dir}.")
 
 
 def build_console() -> Console:
