@@ -8,23 +8,29 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "chainlit>=2.11.1",
     "email-validator>=2.3.0",
     "fastembed>=0.8.0",
-    "gliner>=0.2.22",
+    "gliner>=0.2.26",
     "jinja2>=3.1.6",
+    "langchain-core>=1.4.0",
+    "langchain-openai>=1.2.2",
     "langchain-text-splitters>=1.1.2",
+    "langgraph>=1.2.2",
+    "langsmith>=0.8.7",
     "loguru>=0.7.3",
-    "openai>=1.82.1",
-    "phonenumbers>=9.0.19",
-    "pydantic>=2.11.5",
-    "pydantic-settings>=2.10.1",
+    "openai>=2.38.0",
+    "phonenumbers>=9.0.31",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
     "pymupdf4llm>=1.27.2.3",
+    "pyyaml>=6.0.3",
     "qdrant-client>=1.18.0",
-    "pyyaml>=6.0.2",
     "rapidfuzz>=3.14.5",
-    "rich>=14.1.0",
-    "typer>=0.16.0",
-    "weasyprint>=68.0",
+    "rich>=15.0.0",
+    "sentence-transformers>=5.5.1",
+    "typer>=0.26.4",
+    "weasyprint>=68.1",
 ]
 
 [project.scripts]
@@ -33,10 +39,10 @@ cv-screener = "cv_screener:main"
 [dependency-groups]
 dev = [
     "basedpyright>=1.39.6",
-    "pre-commit>=4.0.0",
-    "pyrefly>=0.34.0",
-    "pytest>=8.4.0",
-    "ruff>=0.11.13",
+    "pre-commit>=4.6.0",
+    "pyrefly>=1.0.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.15",
 ]
 
 [tool.pyrefly]
