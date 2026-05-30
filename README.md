@@ -164,25 +164,31 @@ The project exposes a Typer CLI through the `cv-screener` command.
 Generate fake CV YAML profiles:
 
 ```bash
-uv run cv-screener generate-cvs --count 30 --output-dir data/cvs_contents
+uv run cv-screener generate-content --count 30 --output-dir data/cvs_contents
 ```
 
 Generate fake CV YAML profiles with the local model:
 
 ```bash
-uv run cv-screener generate-cvs --count 3 --mode llm --output-dir data/cvs_contents
+uv run cv-screener generate-content --count 3 --mode llm --output-dir data/cvs_contents
+```
+
+Generate YAML profiles and render only those generated CVs into PDFs:
+
+```bash
+uv run cv-screener generate-cvs --count 3
 ```
 
 Validate generated YAML files:
 
 ```bash
-uv run cv-screener validate-cvs --input-dir data/cvs_contents
+uv run cv-screener validate data/cvs_contents
 ```
 
-Render CV PDFs:
+Render CV PDFs from a YAML file or directory:
 
 ```bash
-uv run cv-screener render-pdfs
+uv run cv-screener render data/cvs_contents
 ```
 
 Ingest PDFs into the RAG indexes:
