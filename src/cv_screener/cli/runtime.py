@@ -40,13 +40,22 @@ class CLIRuntimeSettings:
     color: ColorMode
 
 
+_DEFAULT_RUNTIME_SETTINGS = CLIRuntimeSettings(
+    log_level=LogLevel.INFO,
+    no_progress=False,
+    color=ColorMode.AUTO,
+)
+_runtime_state = {"settings": _DEFAULT_RUNTIME_SETTINGS}
+
+
 def configure_callback(
     ctx: typer.Context,
+    *,
     log_level: Annotated[
         LogLevel,
         typer.Option(help="Global log level for CLI commands."),
     ] = LogLevel.INFO,
-    no_progress: Annotated[  # noqa: FBT002
+    no_progress: Annotated[
         bool,
         typer.Option(
             "--no-progress",
@@ -59,14 +68,18 @@ def configure_callback(
     ] = ColorMode.AUTO,
 ) -> None:
     """Configure global CLI runtime behavior."""
-    ctx.obj = CLIRuntimeSettings(
+    settings = CLIRuntimeSettings(
         log_level=log_level,
         no_progress=no_progress,
         color=color,
     )
+    ctx.obj = settings
+    _runtime_state["settings"] = settings
 
 
-def init_command(ctx: typer.Context) -> tuple[CLIRuntimeSettings, Console]:
+def init_command(
+    ctx: typer.Context | None = None,
+) -> tuple[CLIRuntimeSettings, Console]:
     """Initialize per-command runtime settings and logging."""
     settings = _get_runtime_settings(ctx)
     console = Console(
@@ -105,14 +118,10 @@ def is_ci_environment() -> bool:
     return os.environ.get("CI", "").strip().lower() in {"1", "true", "yes"}
 
 
-def _get_runtime_settings(ctx: typer.Context) -> CLIRuntimeSettings:
+def _get_runtime_settings(ctx: typer.Context | None) -> CLIRuntimeSettings:
     """Return the root CLI runtime settings for the current command."""
-    return (
-        ctx.obj
-        if isinstance(ctx.obj, CLIRuntimeSettings)
-        else CLIRuntimeSettings(
-            log_level=LogLevel.INFO,
-            no_progress=False,
-            color=ColorMode.AUTO,
-        )
-    )
+    if ctx is None:
+        return _runtime_state["settings"]
+    if isinstance(ctx.obj, CLIRuntimeSettings):
+        return ctx.obj
+    return _DEFAULT_RUNTIME_SETTINGS

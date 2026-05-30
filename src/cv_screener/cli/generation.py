@@ -1,6 +1,8 @@
 """Helpers for CV content generation CLI commands."""
 
+from importlib import import_module
 from pathlib import Path
+from typing import cast
 
 import typer
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
@@ -15,7 +17,7 @@ from cv_screener.cv_generation.content.generator import (
 
 def generate_cv_content_files(
     *,
-    ctx: typer.Context,
+    ctx: typer.Context | None,
     count: int,
     mode: GenerationMode,
     output_dir: Path,
@@ -49,13 +51,13 @@ def generate_cv_content_files(
 
 def build_profile_source(mode: GenerationMode) -> CVProfileSource:
     """Build the profile source for the selected generation mode."""
-    from cv_screener.cv_generation.content.sources import (  # noqa: PLC0415
-        OpenAICVProfileSource,
-        SeededCVProfileSource,
-    )
+    sources_module = import_module("cv_screener.cv_generation.content.sources")
 
     if mode is GenerationMode.LLM:
-        from cv_screener.config import GenerationSettings  # noqa: PLC0415
+        config_module = import_module("cv_screener.config")
+        settings_type = cast("type[object]", config_module.GenerationSettings)
+        source = sources_module.OpenAICVProfileSource(settings_type())
+        return cast("CVProfileSource", source)
 
-        return OpenAICVProfileSource(GenerationSettings())
-    return SeededCVProfileSource()
+    source = sources_module.SeededCVProfileSource()
+    return cast("CVProfileSource", source)

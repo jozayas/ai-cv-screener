@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from qdrant_client.http.models import PointStruct, SparseVectorParams, VectorParams
+    from qdrant_client.http.models import (
+        PointStruct,
+        QueryResponse,
+    )
 
 
 class EmbeddingModel(Protocol):
@@ -23,7 +26,7 @@ class EmbeddingModel(Protocol):
         ...
 
 
-class QdrantClientProtocol(Protocol):
+class QdrantIndexClientProtocol(Protocol):
     """Protocol for the subset of Qdrant client features the indexer needs."""
 
     def collection_exists(self, collection_name: str) -> bool:
@@ -33,26 +36,31 @@ class QdrantClientProtocol(Protocol):
     def create_collection(
         self,
         collection_name: str,
-        vectors_config: VectorParams | dict[str, VectorParams] | None = None,
-        sparse_vectors_config: dict[str, SparseVectorParams] | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> bool:
         """Create a collection with vector configuration."""
         ...
 
-    def delete_collection(self, collection_name: str, **kwargs: Any) -> bool:  # noqa: ANN401
+    def delete_collection(self, collection_name: str, **kwargs: object) -> bool:
         """Delete an existing collection."""
         ...
 
-    def upload_points(  # noqa: PLR0913
+    def upload_points(
         self,
         collection_name: str,
         points: Iterable[PointStruct],
-        *,
-        batch_size: int = 64,
-        parallel: int = 1,
-        max_retries: int = 3,
-        wait: bool = True,
+        **kwargs: object,
     ) -> None:
         """Upload points into a collection."""
+        ...
+
+class QdrantQueryClientProtocol(Protocol):
+    """Protocol for the subset of Qdrant client features the retriever needs."""
+
+    def query_points(
+        self,
+        collection_name: str,
+        **kwargs: object,
+    ) -> QueryResponse:
+        """Query points from a collection."""
         ...

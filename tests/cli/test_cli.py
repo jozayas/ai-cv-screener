@@ -6,9 +6,11 @@ from typer.testing import CliRunner
 
 from cv_screener.cli import ColorMode, LogLevel, should_use_color, should_use_progress
 from cv_screener.cli.app import app as cli_app
+from cv_screener.ingestion import IngestionSummary
 
 runner = CliRunner()
 cli_app_module = importlib.import_module("cv_screener.cli.app")
+cli_commands = importlib.import_module("cv_screener.cli.commands")
 cli_generation = importlib.import_module("cv_screener.cli.generation")
 
 
@@ -149,7 +151,7 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
 
     monkeypatch.setattr(cli_generation, "CVGenerationService", FakeGenerationService)
     monkeypatch.setattr(
-        cli_app_module,
+        cli_commands,
         "build_pdf_rendering_service",
         FakePDFRenderingService,
     )
@@ -211,7 +213,7 @@ def test_render_command_renders_single_yaml_file(
             return [rendered_path]
 
     monkeypatch.setattr(
-        cli_app_module,
+        cli_commands,
         "build_pdf_rendering_service",
         FakePDFRenderingService,
     )
@@ -262,7 +264,7 @@ def test_render_command_renders_yaml_directory(
             return rendered_paths
 
     monkeypatch.setattr(
-        cli_app_module,
+        cli_commands,
         "build_pdf_rendering_service",
         FakePDFRenderingService,
     )
@@ -300,12 +302,10 @@ def test_ingest_command_orchestrates_pdf_ingestion(
 
         def ingest(self, *, reset: bool = False) -> object:
             calls.append(("ingest", reset, None))
-            return cli_app_module.IngestionSummary(
-                pdf_count=2, chunk_count=5, reset=reset
-            )
+            return IngestionSummary(pdf_count=2, chunk_count=5, reset=reset)
 
     monkeypatch.setattr(
-        cli_app_module,
+        cli_commands,
         "build_cv_ingestion_service",
         FakeIngestionService,
     )

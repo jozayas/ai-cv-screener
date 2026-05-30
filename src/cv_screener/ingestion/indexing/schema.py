@@ -38,6 +38,11 @@ class QdrantIndexConfig(BaseModel):
         default="cosine",
         description="Qdrant distance metric for semantic search.",
     )
+    dense_vector_name: str = Field(
+        default="dense",
+        min_length=1,
+        description="Named dense vector for semantic search when using multi-vector collections.",
+    )
     batch_size: int = Field(
         default=64,
         ge=1,

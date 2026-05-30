@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient, models
 
-from cv_screener.ingestion.chunking.schema import Chunk  # noqa: TC001
 from cv_screener.ingestion.indexing.bm25 import BM25Encoder, BM25EncoderProtocol
 from cv_screener.ingestion.indexing.points import build_points
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
 
 if TYPE_CHECKING:
+    from cv_screener.ingestion.chunking.schema import Chunk
     from cv_screener.ingestion.indexing.protocols import (
         EmbeddingModel,
-        QdrantClientProtocol,
-)
+        QdrantIndexClientProtocol,
+    )
 
 _DISTANCE_BY_NAME = {
     "cosine": models.Distance.COSINE,
@@ -30,6 +30,7 @@ class QdrantChunkIndexer:
     """Index CV chunks into a Qdrant collection."""
 
     config: QdrantIndexConfig
+    _client: QdrantIndexClientProtocol
     _embedding_model: EmbeddingModel
     _bm25_encoder: BM25EncoderProtocol | None
 
@@ -37,20 +38,20 @@ class QdrantChunkIndexer:
         self,
         config: QdrantIndexConfig | None = None,
         *,
-        client: QdrantClientProtocol | None = None,
+        client: QdrantIndexClientProtocol | None = None,
         embedding_model: EmbeddingModel | None = None,
         bm25_encoder: BM25EncoderProtocol | None = None,
     ) -> None:
         """Bind Qdrant and embedding dependencies to the indexing config."""
         self.config = config or QdrantIndexConfig()
         if client is not None:
-            self._client: QdrantClientProtocol = client
+            self._client = client
         else:
             real_client = QdrantClient(
                 url=self.config.url,
                 check_compatibility=self.config.check_compatibility,
             )
-            self._client = real_client  # type: ignore[assignment]
+            self._client = cast("QdrantIndexClientProtocol", real_client)
         self._embedding_model = embedding_model or TextEmbedding(
             model_name=self.config.embedding_model_name,
         )
@@ -73,7 +74,7 @@ class QdrantChunkIndexer:
         sparse_vectors_config: dict[str, models.SparseVectorParams] | None = None
         if self.config.enable_bm25:
             vectors_config: models.VectorParams | dict[str, models.VectorParams] = {
-                "dense": models.VectorParams(
+                self.config.dense_vector_name: models.VectorParams(
                     size=self.config.vector_size,
                     distance=_DISTANCE_BY_NAME[self.config.distance],
                 ),

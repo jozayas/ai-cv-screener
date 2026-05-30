@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from qdrant_client.http.models import SparseVectorParams, VectorParams
 
@@ -54,7 +54,7 @@ class FakeBM25Encoder:
 class FakeQdrantClient:
     """Fake Qdrant client that captures calls for test assertions."""
 
-    def __init__(self, *, exists: bool = False, **_kwargs: Any) -> None:  # noqa: ANN401
+    def __init__(self, *, exists: bool = False, **_kwargs: object) -> None:
         self.exists: bool = exists
         self.created: list[tuple[str, object, object]] = []
         self.deleted: list[str] = []
@@ -71,27 +71,27 @@ class FakeQdrantClient:
         collection_name: str,
         vectors_config: VectorParams | dict[str, VectorParams] | None = None,
         sparse_vectors_config: dict[str, SparseVectorParams] | None = None,
-        **_kwargs: Any,  # noqa: ANN401
+        **_kwargs: object,
     ) -> bool:
         self.created.append((collection_name, vectors_config, sparse_vectors_config))
         self.exists = True
         return True
 
-    def delete_collection(self, collection_name: str, **_kwargs: Any) -> bool:  # noqa: ANN401
+    def delete_collection(self, collection_name: str, **_kwargs: object) -> bool:
         self.deleted.append(collection_name)
         self.exists = False
         return True
 
-    def upload_points(  # noqa: PLR0913
+    def upload_points(
         self,
         collection_name: str,
         points: Iterable[PointStruct],
-        *,
-        batch_size: int = 64,
-        parallel: int = 1,
-        max_retries: int = 3,
-        wait: bool = True,
+        **kwargs: object,
     ) -> None:
+        batch_size = cast("int", kwargs.get("batch_size", 64))
+        parallel = cast("int", kwargs.get("parallel", 1))
+        max_retries = cast("int", kwargs.get("max_retries", 3))
+        wait = cast("bool", kwargs.get("wait", True))
         self.uploads.append(
             (collection_name, list(points), batch_size, parallel, max_retries, wait)
         )

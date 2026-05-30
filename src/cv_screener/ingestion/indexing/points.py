@@ -73,7 +73,7 @@ def _build_point_vector(
     """Construct the vector field for a Qdrant point with BM25 sparse vectors."""
     sparse = sparse_vectors[index]
     return {
-        "dense": vector_list,
+        config.dense_vector_name: vector_list,
         config.sparse_vector_name: models.SparseVector(
             indices=list(sparse.keys()),
             values=list(sparse.values()),
