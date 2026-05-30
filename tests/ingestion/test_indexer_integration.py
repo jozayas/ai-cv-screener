@@ -7,6 +7,10 @@ import pytest
 from qdrant_client import QdrantClient
 
 from cv_screener.ingestion.chunking.schema import Chunk
+from cv_screener.ingestion.indexing.points import (
+    document_id_for_chunk,
+    point_id_for_chunk,
+)
 from cv_screener.ingestion.indexing.qdrant import QdrantChunkIndexer
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
 
@@ -57,7 +61,7 @@ def test_qdrant_chunk_indexer_indexes_into_live_qdrant() -> None:
 
     stored_points = client.retrieve(
         collection_name=collection_name,
-        ids=[UUID(indexer.point_id_for_chunk(chunk))],
+        ids=[UUID(point_id_for_chunk(chunk))],
         with_payload=True,
         with_vectors=False,
     )
@@ -65,6 +69,4 @@ def test_qdrant_chunk_indexer_indexes_into_live_qdrant() -> None:
     assert len(stored_points) == 1
     assert stored_points[0].payload is not None
     assert stored_points[0].payload["source_file"] == "marta-alvarez.pdf"
-    assert stored_points[0].payload["document_id"] == indexer.document_id_for_chunk(
-        chunk
-    )
+    assert stored_points[0].payload["document_id"] == document_id_for_chunk(chunk)

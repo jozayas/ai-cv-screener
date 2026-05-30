@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from qdrant_client.http.models import PointStruct, VectorParams
+    from qdrant_client.http.models import PointStruct, SparseVectorParams, VectorParams
 
 
 class EmbeddingModel(Protocol):
@@ -34,6 +34,7 @@ class QdrantClientProtocol(Protocol):
         self,
         collection_name: str,
         vectors_config: VectorParams | dict[str, VectorParams] | None = None,
+        sparse_vectors_config: dict[str, SparseVectorParams] | None = None,
         **kwargs: Any,  # noqa: ANN401
     ) -> bool:
         """Create a collection with vector configuration."""
