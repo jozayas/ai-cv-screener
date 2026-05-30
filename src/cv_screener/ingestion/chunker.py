@@ -1,111 +1,133 @@
-"""Section-aware chunker for parsed CV documents.
+"""Public chunking API for parsed CV documents."""
 
-Uses LangChain's MarkdownHeaderTextSplitter to split by markdown headings
-and FastEmbed embedding similarity to classify sections. Semantic sub-chunking
-will be added in a later slice.
-"""
+from dataclasses import dataclass
 
-import numpy as np
-from fastembed import TextEmbedding
-from langchain_text_splitters import MarkdownHeaderTextSplitter
 from loguru import logger
 
+from cv_screener.ingestion.chunking import (
+    MARKDOWN_SPLITTER,
+    MetadataExtractor,
+    SectionChunkRequest,
+    SectionClassifier,
+    SemanticChunker,
+    resolve_section,
+)
 from cv_screener.ingestion.schema import Chunk, ChunkConfig, ParsedCV
 
-_HEADER_SECTION = "header"
 
-_MARKDOWN_SPLITTER = MarkdownHeaderTextSplitter(
-    headers_to_split_on=[("##", "section")],
-)
-
-
-class _SectionClassifier:
-    """Lazy-loaded classifier that maps headings to canonical CV sections."""
-
-    def __init__(self, config: ChunkConfig) -> None:
-        self._config = config
-        self._model: TextEmbedding | None = None
-        self._section_vectors: np.ndarray | None = None
-
-    @property
-    def model(self) -> TextEmbedding:
-        if self._model is None:
-            self._model = TextEmbedding(model_name=self._config.model_name)
-        return self._model
-
-    def section_vectors(self) -> np.ndarray:
-        if self._section_vectors is None:
-            embeddings = np.vstack(
-                list(self.model.embed(self._config.canonical_sections))
-            )
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            vectors = embeddings / norms
-            self._section_vectors = vectors
-            return vectors
-        return self._section_vectors
-
-    @property
-    def canonical_sections(self) -> list[str]:
-        return self._config.canonical_sections
-
-    @property
-    def similarity_threshold(self) -> float:
-        return self._config.similarity_threshold
-
-    def classify(self, raw_section: str) -> str:
-        """Map a raw heading to the closest canonical section."""
-        cleaned = raw_section.strip().strip("*").strip().upper()
-        heading_vector = next(iter(self.model.embed([cleaned])))
-        heading_vector = heading_vector / np.linalg.norm(heading_vector)
-
-        similarities = self.section_vectors() @ heading_vector
-        best_match = np.argmax(similarities).item()
-
-        if similarities[best_match].item() >= self.similarity_threshold:
-            return self.canonical_sections[best_match]
-        return _HEADER_SECTION
+@dataclass(frozen=True)
+class _ChunkBuildContext:
+    cv: ParsedCV
+    provenance: "_ChunkProvenance"
+    candidate_name: str | None
+    metadata_extractor: MetadataExtractor
 
 
-def _resolve_section(doc_section: str, classifier: _SectionClassifier) -> str:
-    if not doc_section:
-        return _HEADER_SECTION
-    return classifier.classify(doc_section)
+@dataclass(frozen=True)
+class _ChunkProvenance:
+    source_file: str
+    document_title: str
 
 
 def _build_chunk(
-    *, cv: ParsedCV, page_number: int, section: str, texts: list[str]
+    *,
+    context: _ChunkBuildContext,
+    page: int,
+    chunk_index: int,
+    section: str,
+    text: str,
 ) -> Chunk | None:
-    combined = "\n\n".join(text for text in texts if text).strip()
-    if not combined:
+    cleaned_text = text.strip()
+    if not cleaned_text:
         return None
+
+    extraction = context.metadata_extractor.extract_chunk_metadata(cleaned_text)
+
     return Chunk(
-        source_filename=cv.filename,
-        page_number=page_number,
+        candidate_name=context.candidate_name,
+        source_file=context.provenance.source_file,
+        document_title=context.provenance.document_title,
+        page=page,
+        chunk_index=chunk_index,
         section=section,
-        text=combined,
+        detected_skills=extraction.detected_skills,
+        detected_companies=extraction.detected_companies,
+        detected_universities=extraction.detected_universities,
+        email_addresses=extraction.email_addresses,
+        phone_numbers=extraction.phone_numbers,
+        linkedin_urls=extraction.linkedin_urls,
+        github_urls=extraction.github_urls,
+        text=cleaned_text,
     )
 
 
-def chunk_cv(cv: ParsedCV, config: ChunkConfig | None = None) -> list[Chunk]:
-    """Split a parsed CV into section-aware chunks based on markdown headings."""
-    classifier = _SectionClassifier(config or ChunkConfig())
+def _build_provenance(cv: ParsedCV) -> _ChunkProvenance:
+    return _ChunkProvenance(
+        source_file=cv.source_path.name,
+        document_title=cv.title.strip(),
+    )
+
+
+def _build_section_chunks(
+    *,
+    context: _ChunkBuildContext,
+    request: SectionChunkRequest,
+    semantic_chunker: SemanticChunker,
+) -> list[Chunk]:
+    combined = "\n\n".join(text for text in request.texts if text).strip()
+    if not combined:
+        return []
+
     chunks: list[Chunk] = []
+    next_chunk_index = request.starting_chunk_index
+    for text in semantic_chunker.split(combined):
+        chunk = _build_chunk(
+            context=context,
+            page=request.page_number,
+            chunk_index=next_chunk_index,
+            section=request.section,
+            text=text,
+        )
+        if chunk is not None:
+            chunks.append(chunk)
+            next_chunk_index += 1
+    return chunks
+
+
+def chunk_cv(cv: ParsedCV, config: ChunkConfig | None = None) -> list[Chunk]:
+    """Split a parsed CV into retrieval-ready semantic chunks."""
+    resolved_config = config or ChunkConfig()
+    classifier = SectionClassifier(resolved_config)
+    metadata_extractor = MetadataExtractor(resolved_config)
+    semantic_chunker = SemanticChunker(resolved_config, classifier.model)
+    context = _ChunkBuildContext(
+        cv=cv,
+        provenance=_build_provenance(cv),
+        candidate_name=metadata_extractor.candidate_name(cv),
+        metadata_extractor=metadata_extractor,
+    )
+    chunks: list[Chunk] = []
+    next_chunk_index = 0
 
     for page in cv.pages:
         page_by_section: dict[str, list[str]] = {}
-        for doc in _MARKDOWN_SPLITTER.split_text(page.markdown):
-            section = _resolve_section(doc.metadata.get("section", ""), classifier)
+        for doc in MARKDOWN_SPLITTER.split_text(page.markdown):
+            section = resolve_section(doc.metadata.get("section", ""), classifier)
             page_by_section.setdefault(section, []).append(doc.page_content.strip())
 
         for section, texts in page_by_section.items():
-            chunk = _build_chunk(
-                cv=cv,
-                page_number=page.page_number,
-                section=section,
-                texts=texts,
+            section_chunks = _build_section_chunks(
+                context=context,
+                request=SectionChunkRequest(
+                    page_number=page.page_number,
+                    starting_chunk_index=next_chunk_index,
+                    section=section,
+                    texts=texts,
+                ),
+                semantic_chunker=semantic_chunker,
             )
-            if chunk is not None:
-                chunks.append(chunk)
+            chunks.extend(section_chunks)
+            next_chunk_index += len(section_chunks)
 
     logger.debug(
         "Chunked CV",
@@ -122,3 +144,6 @@ def chunk_cvs(cvs: list[ParsedCV], config: ChunkConfig | None = None) -> list[Ch
     all_chunks = [chunk for cv in cvs for chunk in chunk_cv(cv, config=resolved_config)]
     logger.info("Chunked all CVs", total_cvs=len(cvs), total_chunks=len(all_chunks))
     return all_chunks
+
+
+__all__ = ["MetadataExtractor", "chunk_cv", "chunk_cvs"]
