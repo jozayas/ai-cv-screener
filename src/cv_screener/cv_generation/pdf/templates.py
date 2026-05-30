@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 
 from cv_screener.cv_generation.content.schema import CVProfile
 from cv_screener.cv_generation.pdf.sections import (
@@ -38,6 +39,15 @@ class TemplateSelection:
 
     template_id: str
     section_order_preset: str
+
+
+class TemplateId(StrEnum):
+    """Supported PDF template identifiers."""
+
+    MODERNCV_INSPIRED = "moderncv_inspired"
+    DEEDY_INSPIRED = "deedy_inspired"
+    AWESOME_CV_INSPIRED = "awesome_cv_inspired"
+    ALTACV_INSPIRED = "altacv_inspired"
 
 
 TEMPLATE_DEFINITIONS: tuple[TemplateDefinition, ...] = (
@@ -165,13 +175,30 @@ TEMPLATE_DEFINITIONS: tuple[TemplateDefinition, ...] = (
     ),
 )
 
-def select_template(profile: CVProfile) -> tuple[TemplateDefinition, TemplatePreset]:
+
+def select_template(
+    profile: CVProfile,
+    template_id: TemplateId | None = None,
+) -> tuple[TemplateDefinition, TemplatePreset]:
     """Deterministically select a template and section preset for a profile."""
     profile_key = profile.candidate_id.int
-    definition = TEMPLATE_DEFINITIONS[profile_key % len(TEMPLATE_DEFINITIONS)]
+    definition = (
+        get_template_definition(template_id)
+        if template_id is not None
+        else TEMPLATE_DEFINITIONS[profile_key % len(TEMPLATE_DEFINITIONS)]
+    )
     preset_index = (profile_key // len(TEMPLATE_DEFINITIONS)) % len(definition.presets)
     preset = definition.presets[preset_index]
     return definition, preset
+
+
+def get_template_definition(template_id: TemplateId) -> TemplateDefinition:
+    """Return a template definition by template id."""
+    for definition in TEMPLATE_DEFINITIONS:
+        if definition.template_id == template_id:
+            return definition
+    msg = f"Unknown template id: {template_id}"
+    raise ValueError(msg)
 
 
 def describe_template_selection(profile: CVProfile) -> TemplateSelection:

@@ -1,7 +1,7 @@
 """Typer application and command definitions."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -16,7 +16,10 @@ from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     GenerationMode,
 )
-from cv_screener.cv_generation.pdf import PDFRenderingService
+from cv_screener.cv_generation.pdf.templates import TemplateId
+
+if TYPE_CHECKING:
+    from cv_screener.cv_generation.pdf.renderer import PDFRenderingService
 
 app = typer.Typer(
     help="CV screener CLI.",
@@ -52,8 +55,8 @@ def main_callback(
     )
 
 
-@app.command("generate-cv-content")
-def generate_cv_content(
+@app.command("generate-content")
+def generate_content(
     ctx: typer.Context,
     count: int = typer.Option(3, min=1, max=50, help="Number of YAML CVs to generate."),
     mode: Annotated[
@@ -80,7 +83,7 @@ def generate_cv_content(
 
 
 @app.command("generate-cvs")
-def generate_cvs(
+def generate_cvs(  # noqa: PLR0913
     ctx: typer.Context,
     count: int = typer.Option(3, min=1, max=50, help="Number of CVs to generate and render."),
     mode: Annotated[
@@ -101,6 +104,10 @@ def generate_cvs(
         writable=True,
         help="Directory where PDF CVs will be written.",
     ),
+    template_id: Annotated[
+        TemplateId | None,
+        typer.Option(help="Optional PDF template to use instead of deterministic selection."),
+    ] = None,
 ) -> None:
     """Generate validated CV content YAML files and render them into PDFs."""
     written_files = generate_cv_content_files(
@@ -110,42 +117,54 @@ def generate_cvs(
         output_dir=content_dir,
     )
     typer.echo(f"Generated {len(written_files)} CV YAML files in {content_dir}.")
-    rendered_files = PDFRenderingService(
+    rendered_files = build_pdf_rendering_service(
         input_dir=content_dir,
         output_dir=pdf_dir,
-    ).render_directory()
+        template_id=template_id,
+    ).render_files(written_files)
     typer.echo(f"Rendered {len(rendered_files)} CV PDFs in {pdf_dir}.")
 
 
-@app.command("validate-cvs")
-def validate_cvs(
+@app.command("validate")
+def validate(
     ctx: typer.Context,
-    input_dir: Path = typer.Option(
-        Path("data/cvs_contents"),
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        readable=True,
-        help="Directory containing YAML CV files.",
-    ),
+    input_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=True,
+            readable=True,
+            help="YAML CV file or directory of YAML CV files to validate.",
+        ),
+    ],
 ) -> None:
-    """Validate generated CV content YAML files."""
+    """Validate one YAML CV file or a directory of YAML CV files."""
     init_command(ctx)
-    validated_files = CVGenerationService(output_dir=input_dir).validate_directory(input_dir)
-    typer.echo(f"Validated {len(validated_files)} CV YAML files in {input_dir}.")
+    input_dir = input_path if input_path.is_dir() else input_path.parent
+    service = CVGenerationService(output_dir=input_dir)
+    validated_files = (
+        service.validate_directory(input_path)
+        if input_path.is_dir()
+        else service.validate_files([input_path])
+    )
+    target = "files" if input_path.is_dir() else "file"
+    typer.echo(f"Validated {len(validated_files)} CV YAML {target} in {input_path}.")
 
 
-@app.command("render-pdfs")
-def render_pdfs(
+@app.command("render")
+def render(
     ctx: typer.Context,
-    input_dir: Path = typer.Option(
-        Path("data/cvs_contents"),
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        readable=True,
-        help="Directory containing YAML CV files.",
-    ),
+    input_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=True,
+            readable=True,
+            help="YAML CV file or directory of YAML CV files to render.",
+        ),
+    ],
     output_dir: Path = typer.Option(
         Path("data/cv_pdfs"),
         file_okay=False,
@@ -153,14 +172,44 @@ def render_pdfs(
         writable=True,
         help="Directory where PDF CV files will be written.",
     ),
+    template_id: Annotated[
+        TemplateId | None,
+        typer.Option(help="Optional PDF template to use instead of deterministic selection."),
+    ] = None,
 ) -> None:
-    """Render generated YAML CV files into PDFs."""
+    """Render one YAML CV file or a directory of YAML CV files into PDFs."""
     init_command(ctx)
-    rendered_files = PDFRenderingService(
+    input_dir = input_path if input_path.is_dir() else input_path.parent
+    service = build_pdf_rendering_service(
         input_dir=input_dir,
         output_dir=output_dir,
-    ).render_directory()
-    typer.echo(f"Rendered {len(rendered_files)} CV PDFs in {output_dir}.")
+        template_id=template_id,
+    )
+    rendered_files = (
+        service.render_directory(input_path)
+        if input_path.is_dir()
+        else service.render_files([input_path])
+    )
+    target = "PDFs" if input_path.is_dir() else "PDF"
+    typer.echo(f"Rendered {len(rendered_files)} {target} in {output_dir}.")
+
+
+def build_pdf_rendering_service(
+    *,
+    input_dir: Path,
+    output_dir: Path,
+    template_id: TemplateId | None,
+) -> "PDFRenderingService":
+    """Build the PDF rendering service lazily to keep CLI help fast."""
+    from cv_screener.cv_generation.pdf.renderer import (  # noqa: PLC0415
+        PDFRenderingService,
+    )
+
+    return PDFRenderingService(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        template_id=template_id,
+    )
 
 
 def main() -> None:

@@ -12,19 +12,20 @@ from cv_screener.cv_generation.pdf.sections import (
     build_pdf_filename,
     build_section_content,
 )
-from cv_screener.cv_generation.pdf.templates import select_template
+from cv_screener.cv_generation.pdf.templates import TemplateId, select_template
 
 
 class CVPDFRenderer:
     """Render validated CV profiles into HTML and PDF outputs."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, template_id: TemplateId | None = None) -> None:
         """Initialize the renderer with package-backed templates."""
+        self.template_id = template_id
         self._environment = self._build_environment()
 
     def render_html(self, profile: CVProfile) -> str:
         """Render a CV profile into HTML using a deterministic template selection."""
-        definition, preset = select_template(profile)
+        definition, preset = select_template(profile, template_id=self.template_id)
         template = self._environment.get_template(f"{definition.template_id}.html.j2")
         sections = build_section_content(profile, definition.section_titles)
         context = {
@@ -72,17 +73,22 @@ class PDFRenderingService:
         input_dir: Path,
         output_dir: Path,
         renderer: CVPDFRenderer | None = None,
+        template_id: TemplateId | None = None,
     ) -> None:
         """Initialize the rendering service."""
         self.input_dir = input_dir
         self.output_dir = output_dir
-        self.renderer = renderer or CVPDFRenderer()
+        self.renderer = renderer or CVPDFRenderer(template_id=template_id)
 
     def render_directory(self, directory: Path | None = None) -> list[Path]:
         """Render every YAML CV file in a directory into a PDF."""
         source_dir = directory or self.input_dir
+        return self.render_files(sorted(source_dir.glob("*.yaml")))
+
+    def render_files(self, paths: list[Path]) -> list[Path]:
+        """Render specific YAML CV files into PDFs."""
         rendered_files: list[Path] = []
-        for path in sorted(source_dir.glob("*.yaml")):
+        for path in paths:
             profile = load_cv_profile(path)
             output_path = self.output_dir / build_pdf_filename(profile)
             logger.info(

@@ -8,7 +8,10 @@ from cv_screener.cv_generation.pdf.renderer import (
     PDFRenderingService,
 )
 from cv_screener.cv_generation.pdf.sections import build_pdf_filename
-from cv_screener.cv_generation.pdf.templates import describe_template_selection
+from cv_screener.cv_generation.pdf.templates import (
+    TemplateId,
+    describe_template_selection,
+)
 
 
 def build_profile(candidate_id: str) -> CVProfile:
@@ -82,6 +85,16 @@ def test_render_html_uses_selected_template_and_section_order() -> None:
     assert summary_position < education_position
 
 
+def test_render_html_accepts_explicit_template() -> None:
+    renderer = CVPDFRenderer(template_id=TemplateId.MODERNCV_INSPIRED)
+    profile = build_profile("00000000-0000-0000-0000-000000000002")
+
+    html = renderer.render_html(profile)
+
+    assert "ModernCV Inspired" in html
+    assert "Awesome-CV Inspired" not in html
+
+
 def test_render_directory_writes_pdfs_for_yaml_profiles(tmp_path: Path) -> None:
     input_dir = tmp_path / "yaml"
     output_dir = tmp_path / "pdf"
@@ -105,6 +118,34 @@ def test_render_directory_writes_pdfs_for_yaml_profiles(tmp_path: Path) -> None:
         output_dir / "alex-example-00000000-0000-0000-0000-000000000003.pdf"
     ]
     assert rendered_files[0].read_bytes() == b"PDF:00000000-0000-0000-0000-000000000003"
+
+
+def test_render_files_only_renders_given_yaml_paths(tmp_path: Path) -> None:
+    input_dir = tmp_path / "yaml"
+    output_dir = tmp_path / "pdf"
+    selected_profile = build_profile("00000000-0000-0000-0000-000000000004")
+    ignored_profile = build_profile("00000000-0000-0000-0000-000000000006")
+    selected_path = input_dir / "selected.yaml"
+    write_cv_profile(selected_path, selected_profile)
+    write_cv_profile(input_dir / "ignored.yaml", ignored_profile)
+
+    class FakeRenderer(CVPDFRenderer):
+        def write_pdf(self, profile: CVProfile, output_path: Path) -> None:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(f"PDF:{profile.candidate_id}".encode())
+
+    service = PDFRenderingService(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        renderer=FakeRenderer(),
+    )
+
+    rendered_files = service.render_files([selected_path])
+
+    assert rendered_files == [
+        output_dir / "alex-example-00000000-0000-0000-0000-000000000004.pdf"
+    ]
+    assert rendered_files[0].read_bytes() == b"PDF:00000000-0000-0000-0000-000000000004"
 
 
 def test_template_selection_covers_all_fixed_templates() -> None:

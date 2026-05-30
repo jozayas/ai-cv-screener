@@ -4,15 +4,12 @@ import re
 from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 from uuid import uuid4
 
 from loguru import logger
 
-from cv_screener.cv_generation.content.schema import CVProfile
-from cv_screener.cv_generation.content.sources import (
-    CVProfileSource,
-    SeededCVProfileSource,
-)
+from cv_screener.cv_generation.content.schema import CVProfile, CVProfileDraft
 from cv_screener.cv_generation.content.yaml_io import (
     load_cv_profile,
     write_cv_profile,
@@ -27,6 +24,14 @@ class GenerationMode(StrEnum):
 
 
 type ProgressCallback = Callable[[int, int], None]
+
+
+class CVProfileSource(Protocol):
+    """Profile source that can generate draft CV payloads."""
+
+    def generate_draft(self, *, index: int) -> CVProfileDraft:
+        """Generate a single draft CV payload."""
+        ...
 
 
 def build_filename(profile: CVProfile) -> str:
@@ -52,7 +57,13 @@ class CVGenerationService:
     ) -> None:
         """Initialize the service with the target output directory."""
         self.output_dir = output_dir
-        self.profile_source = profile_source or SeededCVProfileSource()
+        if profile_source is None:
+            from cv_screener.cv_generation.content.sources import (  # noqa: PLC0415
+                SeededCVProfileSource,
+            )
+
+            profile_source = SeededCVProfileSource()
+        self.profile_source = profile_source
 
     def generate(
         self,
@@ -105,14 +116,19 @@ class CVGenerationService:
     def validate_directory(self, directory: Path) -> list[Path]:
         """Validate every YAML CV content file in a directory."""
         logger.info("Validating CV content files", input_dir=str(directory))
-        validated_files: list[Path] = []
-        for path in sorted(directory.glob("*.yaml")):
-            logger.debug("Validating CV content file", path=str(path))
-            load_cv_profile(path)
-            validated_files.append(path)
+        validated_files = self.validate_files(sorted(directory.glob("*.yaml")))
         logger.info(
             "Validated CV content files",
             count=len(validated_files),
             input_dir=str(directory),
         )
+        return validated_files
+
+    def validate_files(self, paths: list[Path]) -> list[Path]:
+        """Validate specific YAML CV content files."""
+        validated_files: list[Path] = []
+        for path in paths:
+            logger.debug("Validating CV content file", path=str(path))
+            load_cv_profile(path)
+            validated_files.append(path)
         return validated_files

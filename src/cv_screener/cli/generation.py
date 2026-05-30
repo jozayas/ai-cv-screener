@@ -6,14 +6,10 @@ import typer
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from cv_screener.cli.runtime import init_command, should_use_progress
-from cv_screener.config import GenerationSettings
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
+    CVProfileSource,
     GenerationMode,
-)
-from cv_screener.cv_generation.content.sources import (
-    OpenAICVProfileSource,
-    SeededCVProfileSource,
 )
 
 
@@ -51,8 +47,15 @@ def generate_cv_content_files(
         )
 
 
-def build_profile_source(mode: GenerationMode) -> SeededCVProfileSource | OpenAICVProfileSource:
+def build_profile_source(mode: GenerationMode) -> CVProfileSource:
     """Build the profile source for the selected generation mode."""
+    from cv_screener.cv_generation.content.sources import (  # noqa: PLC0415
+        OpenAICVProfileSource,
+        SeededCVProfileSource,
+    )
+
     if mode is GenerationMode.LLM:
+        from cv_screener.config import GenerationSettings  # noqa: PLC0415
+
         return OpenAICVProfileSource(GenerationSettings())
     return SeededCVProfileSource()
