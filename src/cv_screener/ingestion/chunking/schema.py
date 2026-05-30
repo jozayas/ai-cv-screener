@@ -18,9 +18,7 @@ class Chunk(BaseModel):
         default="",
         description="PDF document title if available for citation display.",
     )
-    page: int = Field(
-        ge=1, description="1-indexed page number where chunk starts."
-    )
+    page: int = Field(ge=1, description="1-indexed page number where chunk starts.")
     chunk_index: int = Field(
         ge=0,
         description="0-indexed chunk position within the parsed CV.",

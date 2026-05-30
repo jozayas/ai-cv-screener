@@ -62,11 +62,15 @@ def test_generate_content_command_generates_yaml_only(
     progress_calls: list[tuple[bool, LogLevel]] = []
 
     class FakeGenerationService:
-        def __init__(self, *, output_dir: Path, profile_source: object | None = None) -> None:
+        def __init__(
+            self, *, output_dir: Path, profile_source: object | None = None
+        ) -> None:
             self.output_dir = output_dir
             self.profile_source = profile_source
 
-        def generate(self, count: int, progress_callback: object | None = None) -> list[Path]:
+        def generate(
+            self, count: int, progress_callback: object | None = None
+        ) -> list[Path]:
             assert self.output_dir == tmp_path
             assert count == 2
             assert progress_callback is None
@@ -76,10 +80,9 @@ def test_generate_content_command_generates_yaml_only(
     monkeypatch.setattr(
         cli_generation,
         "should_use_progress",
-        lambda **kwargs: progress_calls.append(
-            (kwargs["no_progress"], kwargs["log_level"])
-        )
-        or False,
+        lambda **kwargs: (
+            progress_calls.append((kwargs["no_progress"], kwargs["log_level"])) or False
+        ),
     )
 
     result = runner.invoke(
@@ -107,15 +110,22 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
     content_dir = tmp_path / "content"
     pdf_dir = tmp_path / "pdf"
     calls: list[tuple[str, Path, Path | None]] = []
-    generated_paths = [content_dir / "candidate-1.yaml", content_dir / "candidate-2.yaml"]
+    generated_paths = [
+        content_dir / "candidate-1.yaml",
+        content_dir / "candidate-2.yaml",
+    ]
     rendered_paths = [pdf_dir / "candidate-1.pdf", pdf_dir / "candidate-2.pdf"]
 
     class FakeGenerationService:
-        def __init__(self, *, output_dir: Path, profile_source: object | None = None) -> None:
+        def __init__(
+            self, *, output_dir: Path, profile_source: object | None = None
+        ) -> None:
             del profile_source
             calls.append(("generate_init", output_dir, None))
 
-        def generate(self, count: int, progress_callback: object | None = None) -> list[Path]:
+        def generate(
+            self, count: int, progress_callback: object | None = None
+        ) -> list[Path]:
             assert count == 2
             assert progress_callback is None
             calls.append(("generate", content_dir, None))
@@ -275,3 +285,46 @@ def test_render_command_renders_yaml_directory(
         ("render_directory", input_dir, output_dir),
     ]
     assert result.stdout == f"Rendered 2 PDFs in {output_dir}.\n"
+
+
+def test_ingest_command_orchestrates_pdf_ingestion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pdf_dir = tmp_path / "pdfs"
+    pdf_dir.mkdir()
+    calls: list[tuple[str, object, object | None]] = []
+
+    class FakeIngestionService:
+        def __init__(self, *, pdf_dir: Path) -> None:
+            calls.append(("ingest_init", pdf_dir, None))
+
+        def ingest(self, *, reset: bool = False) -> object:
+            calls.append(("ingest", reset, None))
+            return cli_app_module.IngestionSummary(
+                pdf_count=2, chunk_count=5, reset=reset
+            )
+
+    monkeypatch.setattr(
+        cli_app_module,
+        "build_cv_ingestion_service",
+        FakeIngestionService,
+    )
+
+    result = runner.invoke(
+        cli_app,
+        [
+            "--color",
+            "never",
+            "ingest",
+            "--pdf-dir",
+            str(pdf_dir),
+            "--reset",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [
+        ("ingest_init", pdf_dir, None),
+        ("ingest", True, None),
+    ]
+    assert result.stdout == f"Ingested 2 PDFs into 5 chunks from {pdf_dir}.\n"

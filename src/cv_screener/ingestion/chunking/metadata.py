@@ -33,6 +33,7 @@ class _EntityPredictor(Protocol):
         threshold: float,
     ) -> list[dict[str, str | float]]: ...
 
+
 @dataclass(frozen=True)
 class ChunkExtractionResult:
     """Extracted entities and contact metadata for one chunk."""

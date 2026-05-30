@@ -95,7 +95,9 @@ def should_use_color(color: ColorMode) -> bool:
         return True
     if color is ColorMode.NEVER:
         return False
-    return sys.stderr.isatty() and not is_ci_environment() and "NO_COLOR" not in os.environ
+    return (
+        sys.stderr.isatty() and not is_ci_environment() and "NO_COLOR" not in os.environ
+    )
 
 
 def is_ci_environment() -> bool:
@@ -105,8 +107,12 @@ def is_ci_environment() -> bool:
 
 def _get_runtime_settings(ctx: typer.Context) -> CLIRuntimeSettings:
     """Return the root CLI runtime settings for the current command."""
-    return ctx.obj if isinstance(ctx.obj, CLIRuntimeSettings) else CLIRuntimeSettings(
-        log_level=LogLevel.INFO,
-        no_progress=False,
-        color=ColorMode.AUTO,
+    return (
+        ctx.obj
+        if isinstance(ctx.obj, CLIRuntimeSettings)
+        else CLIRuntimeSettings(
+            log_level=LogLevel.INFO,
+            no_progress=False,
+            color=ColorMode.AUTO,
+        )
     )

@@ -42,14 +42,16 @@ class QdrantChunkIndexer:
         self.config = config or QdrantIndexConfig()
         self._client = cast(
             "QdrantClientProtocol",
-            client or QdrantClient(url=self.config.url),
+            client
+            or QdrantClient(
+                url=self.config.url,
+                check_compatibility=self.config.check_compatibility,
+            ),
         )
         self._embedding_model = cast(
             "EmbeddingModel",
             embedding_model
-            or TextEmbedding(
-                model_name=self.config.embedding_model_name
-            ),
+            or TextEmbedding(model_name=self.config.embedding_model_name),
         )
 
     def document_id_for_chunk(self, chunk: Chunk) -> str:

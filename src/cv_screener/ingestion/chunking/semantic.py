@@ -59,12 +59,9 @@ class SemanticChunker:
             candidate_text = " ".join([*current_units, unit])
             average_embedding = np.mean(np.vstack(current_embeddings), axis=0)
             similarity = cosine_similarity(average_embedding, unit_embedding)
-            should_split = (
-                len(candidate_text) > self._config.chunk_size
-                or (
-                    similarity < self._config.semantic_similarity_threshold
-                    and len(" ".join(current_units)) >= (self._config.chunk_size // 3)
-                )
+            should_split = len(candidate_text) > self._config.chunk_size or (
+                similarity < self._config.semantic_similarity_threshold
+                and len(" ".join(current_units)) >= (self._config.chunk_size // 3)
             )
 
             if should_split:

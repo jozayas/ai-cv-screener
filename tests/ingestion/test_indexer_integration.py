@@ -52,4 +52,6 @@ def test_qdrant_chunk_indexer_indexes_into_live_qdrant() -> None:
     assert len(stored_points) == 1
     assert stored_points[0].payload is not None
     assert stored_points[0].payload["source_file"] == "marta-alvarez.pdf"
-    assert stored_points[0].payload["document_id"] == indexer.document_id_for_chunk(chunk)
+    assert stored_points[0].payload["document_id"] == indexer.document_id_for_chunk(
+        chunk
+    )

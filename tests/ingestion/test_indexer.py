@@ -1,5 +1,8 @@
 from typing import TYPE_CHECKING, cast
 
+import pytest
+
+import cv_screener.ingestion.indexing.qdrant as qdrant_module
 from cv_screener.ingestion.chunking.schema import Chunk
 from cv_screener.ingestion.indexing.qdrant import QdrantChunkIndexer
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
@@ -173,3 +176,25 @@ def test_index_chunks_embeds_text_and_uploads_points() -> None:
     assert point.vector == [0.1, 0.2, 0.3]
     assert point.payload is not None
     assert point.payload["source_file"] == "marta-alvarez.pdf"
+
+
+def test_indexer_uses_qdrant_settings_for_default_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeQdrantClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    class FakeTextEmbedding:
+        def __init__(self, model_name: str) -> None:
+            del model_name
+
+    monkeypatch.setattr(qdrant_module, "QdrantClient", FakeQdrantClient)
+    monkeypatch.setattr(qdrant_module, "TextEmbedding", FakeTextEmbedding)
+
+    QdrantChunkIndexer()
+
+    assert captured["url"] == "http://localhost:6333"
+    assert captured["check_compatibility"] is False
