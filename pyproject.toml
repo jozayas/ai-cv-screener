@@ -9,6 +9,14 @@ authors = [
 requires-python = ">=3.12"
 dependencies = []
 
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pyrefly>=1.0.0",
+    "pytest>=9.0.0",
+    "ruff>=0.15.0",
+]
+
 [project.scripts]
 cv-screener = "cv_screener:main"
 
