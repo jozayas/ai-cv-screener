@@ -3,7 +3,6 @@
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     GenerationMode,
-    ProgressMode,
 )
 from cv_screener.cv_generation.content.schema import CVProfile, CVProfileDraft
 from cv_screener.cv_generation.content.sources import (
@@ -17,6 +16,5 @@ __all__ = [
     "CVProfileDraft",
     "GenerationMode",
     "OpenAICVProfileSource",
-    "ProgressMode",
     "SeededCVProfileSource",
 ]

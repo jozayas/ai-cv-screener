@@ -26,26 +26,6 @@ class GenerationMode(StrEnum):
     LLM = "llm"
 
 
-class LogVerbosity(StrEnum):
-    """Supported logging verbosity levels for generation commands."""
-
-    TRACE = "trace"
-    DEBUG = "debug"
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
-    CRITICAL = "critical"
-
-
-class ProgressMode(StrEnum):
-    """Supported progress display modes for generation commands."""
-
-    AUTO = "auto"
-    ON = "on"
-    OFF = "off"
-
-
 type ProgressCallback = Callable[[int, int], None]
 
 
