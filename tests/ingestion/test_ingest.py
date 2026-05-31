@@ -55,11 +55,32 @@ def test_ingest_parses_chunks_and_indexes_pdfs(tmp_path: Path) -> None:
         def index_chunks(self, chunks: list[Chunk], *, reset: bool = False) -> None:
             calls.append(("index", (chunks, reset)))
 
+    class FakeCanonicalStore:
+        def reset_all(self) -> None:
+            calls.append(("store_reset", None))
+
+        def persist(
+            self, *, parsed_cvs: list[ParsedCV], chunks_to_store: list[Chunk]
+        ) -> None:
+            calls.append(("store_persist", (parsed_cvs, chunks_to_store)))
+
+    def parse(
+        directory: Path, *, progress_callback: object | None = None
+    ) -> list[ParsedCV]:
+        _ = progress_callback
+        calls.append(("parse", directory))
+        return parsed_cvs
+
+    def chunk(cvs: list[ParsedCV]) -> list[Chunk]:
+        calls.append(("chunk", cvs))
+        return chunks
+
     service = CVIngestionService(
         pdf_dir=pdf_dir,
-        parser=lambda directory: calls.append(("parse", directory)) or parsed_cvs,
-        chunker=lambda cvs: calls.append(("chunk", cvs)) or chunks,
+        parser=parse,
+        chunker=chunk,
         indexer=FakeIndexer(),
+        canonical_store=FakeCanonicalStore(),
     )
 
     summary = service.ingest(reset=True)
@@ -68,6 +89,8 @@ def test_ingest_parses_chunks_and_indexes_pdfs(tmp_path: Path) -> None:
     assert calls == [
         ("parse", pdf_dir),
         ("chunk", parsed_cvs),
+        ("store_reset", None),
+        ("store_persist", (parsed_cvs, chunks)),
         ("index", (chunks, True)),
     ]
 
@@ -81,10 +104,21 @@ def test_ingest_skips_indexing_when_no_pdfs_are_found(tmp_path: Path) -> None:
         def index_chunks(self, chunks: list[Chunk], *, reset: bool = False) -> None:
             calls.append(("index", (chunks, reset)))
 
+    def parse(
+        directory: Path, *, progress_callback: object | None = None
+    ) -> list[ParsedCV]:
+        _ = progress_callback
+        calls.append(("parse", directory))
+        return []
+
+    def chunk(cvs: list[ParsedCV]) -> list[Chunk]:
+        calls.append(("chunk", cvs))
+        return []
+
     service = CVIngestionService(
         pdf_dir=pdf_dir,
-        parser=lambda directory: calls.append(("parse", directory)) or [],
-        chunker=lambda cvs: calls.append(("chunk", cvs)) or [],
+        parser=parse,
+        chunker=chunk,
         indexer=FakeIndexer(),
     )
 

@@ -18,6 +18,11 @@ class GenerationSettings(BaseSettings):
     generation_model: str = Field(default="gemma3:12b")
     generation_temperature: float = Field(default=0.8, ge=0, le=2)
     generation_max_retries: int = Field(default=2, ge=0, le=5)
+    generation_max_concurrency: int = Field(default=2, ge=1, le=16)
+    generation_min_interval_seconds: float = Field(default=0.35, ge=0, le=30)
+    generation_retry_base_delay_seconds: float = Field(default=0.5, ge=0.05, le=30)
+    generation_retry_max_delay_seconds: float = Field(default=8.0, ge=0.1, le=120)
+    image_generation_max_concurrency: int = Field(default=1, ge=1, le=8)
 
 
 class QdrantSettings(BaseSettings):
@@ -62,3 +67,15 @@ class LangSmithSettings(BaseSettings):
     langsmith_project: str = Field(default="cv-screener")
     langsmith_api_key: SecretStr | None = Field(default=None)
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com")
+
+
+class SQLiteSettings(BaseSettings):
+    """Settings for local SQLite persistence."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    sqlite_path: str = Field(default="data/cv_screener.db")

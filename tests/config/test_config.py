@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from cv_screener.config import LangSmithSettings, QdrantSettings, RAGModelSettings
+from cv_screener.config import (
+    GenerationSettings,
+    LangSmithSettings,
+    QdrantSettings,
+    RAGModelSettings,
+)
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
 
 
@@ -108,3 +113,23 @@ def test_langsmith_settings_read_from_environment(
     assert settings.langsmith_api_key is not None
     assert settings.langsmith_api_key.get_secret_value() == "langsmith-key"
     assert settings.langsmith_endpoint == "https://smith.internal"
+
+
+def test_generation_settings_have_guardrail_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("GENERATION_MAX_CONCURRENCY", raising=False)
+    monkeypatch.delenv("GENERATION_MIN_INTERVAL_SECONDS", raising=False)
+    monkeypatch.delenv("GENERATION_RETRY_BASE_DELAY_SECONDS", raising=False)
+    monkeypatch.delenv("GENERATION_RETRY_MAX_DELAY_SECONDS", raising=False)
+    monkeypatch.delenv("IMAGE_GENERATION_MAX_CONCURRENCY", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    settings = GenerationSettings()
+
+    assert settings.generation_max_concurrency == 2
+    assert settings.generation_min_interval_seconds == pytest.approx(0.35)
+    assert settings.generation_retry_base_delay_seconds == pytest.approx(0.5)
+    assert settings.generation_retry_max_delay_seconds == pytest.approx(8.0)
+    assert settings.image_generation_max_concurrency == 1

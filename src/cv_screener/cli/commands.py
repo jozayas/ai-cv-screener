@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from cv_screener.cli.dependencies import (
     build_chainlit_launcher,
@@ -12,7 +13,7 @@ from cv_screener.cli.dependencies import (
     build_rag_query_service,
 )
 from cv_screener.cli.generation import generate_cv_content_files
-from cv_screener.cli.runtime import init_command
+from cv_screener.cli.runtime import init_command, should_use_progress
 from cv_screener.cli.serve import ChainlitServeRequest, default_chainlit_app_path
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
@@ -194,8 +195,49 @@ def ingest(
     ] = False,
 ) -> IngestionSummary:
     """Parse rendered CV PDFs, chunk them, and index the chunks into Qdrant."""
-    init_command(ctx)
-    summary = build_cv_ingestion_service(pdf_dir=pdf_dir).ingest(reset=reset)
+    runtime, console = init_command(ctx)
+    service = build_cv_ingestion_service(pdf_dir=pdf_dir)
+    pdf_count = len(sorted(pdf_dir.glob("*.pdf")))
+
+    if (
+        not should_use_progress(
+            no_progress=runtime.no_progress,
+            log_level=runtime.log_level,
+        )
+        or pdf_count == 0
+    ):
+        summary = service.ingest(reset=reset)
+    else:
+        total_steps = pdf_count + 3
+        console.print()
+        with Progress(
+            TextColumn("{task.fields[stage]}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("({task.completed:.0f}/{task.total:.0f})"),
+            console=console,
+        ) as progress_bar:
+            task_id = progress_bar.add_task(
+                "ingest",
+                total=total_steps,
+                stage="Ingesting PDFs",
+            )
+
+            def on_progress(current: int, total: int, stage: str) -> None:
+                target_total = total or total_steps
+                if target_total != total_steps:
+                    return
+                progress_bar.update(
+                    task_id,
+                    completed=max(0, min(current, total_steps)),
+                    stage=stage,
+                )
+
+            summary = service.ingest(
+                reset=reset,
+                expected_pdf_count=pdf_count,
+                progress_callback=on_progress,
+            )
     typer.echo(
         f"Ingested {summary.pdf_count} PDFs into {summary.chunk_count} chunks from {pdf_dir}."
     )

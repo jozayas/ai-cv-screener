@@ -246,9 +246,7 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
         "python backend engineer",
         "python api engineer",
     ]
-    assert reranker.calls == [
-        ("python backend engineer", merged_chunks, None)
-    ]
+    assert reranker.calls == [("python backend engineer", merged_chunks, None)]
 
 
 def test_graph_retries_review_once_after_revise_verdict() -> None:

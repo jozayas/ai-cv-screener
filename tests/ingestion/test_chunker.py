@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from fastembed import TextEmbedding
 from pydantic import ValidationError
 
 from cv_screener.ingestion.chunking import chunker
@@ -161,6 +162,41 @@ def test_chunk_cvs_processes_multiple() -> None:
     assert len(chunks) == 2
     assert chunks[0].source_file == "engineer-one.pdf"
     assert chunks[1].source_file == "engineer-two.pdf"
+
+
+def test_chunk_cvs_reuses_runtime_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cv1 = _make_cv("## **SUMMARY**\n\nEngineer one.", "engineer-one")
+    cv2 = _make_cv("## **SUMMARY**\n\nEngineer two.", "engineer-two")
+    calls = {"classifier": 0, "metadata": 0, "semantic": 0}
+
+    original_classifier = chunker.SectionClassifier
+    original_metadata = chunker.MetadataExtractor
+    original_semantic = chunker.SemanticChunker
+
+    class CountingSectionClassifier(original_classifier):
+        def __init__(self, config: ChunkConfig) -> None:
+            calls["classifier"] += 1
+            super().__init__(config)
+
+    class CountingMetadataExtractor(original_metadata):
+        def __init__(self, config: ChunkConfig) -> None:
+            calls["metadata"] += 1
+            super().__init__(config)
+
+    class CountingSemanticChunker(original_semantic):
+        def __init__(self, config: ChunkConfig, model: TextEmbedding) -> None:
+            calls["semantic"] += 1
+            super().__init__(config, model)
+
+    monkeypatch.setattr(chunker, "SectionClassifier", CountingSectionClassifier)
+    monkeypatch.setattr(chunker, "MetadataExtractor", CountingMetadataExtractor)
+    monkeypatch.setattr(chunker, "SemanticChunker", CountingSemanticChunker)
+
+    _ = chunker.chunk_cvs([cv1, cv2])
+
+    assert calls == {"classifier": 1, "metadata": 1, "semantic": 1}
 
 
 def test_chunk_preserves_multi_page() -> None:

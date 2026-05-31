@@ -106,7 +106,9 @@ def router_graph_node(
     return cast(
         "dict[str, object]",
         {
-            **router_node(state, config=get_config(), model=runtime.context.router_model),
+            **router_node(
+                state, config=get_config(), model=runtime.context.router_model
+            ),
             "nodes_executed": _executed(state, "router"),
         },
     )
@@ -136,7 +138,9 @@ def planner_graph_node(
     return cast(
         "dict[str, object]",
         {
-            **planner_node(state, config=get_config(), model=runtime.context.planner_model),
+            **planner_node(
+                state, config=get_config(), model=runtime.context.planner_model
+            ),
             "nodes_executed": _executed(state, "planner"),
         },
     )
@@ -178,7 +182,9 @@ def answer_graph_node(
     return cast(
         "dict[str, object]",
         {
-            **answerer_node(state, config=get_config(), model=runtime.context.answer_model),
+            **answerer_node(
+                state, config=get_config(), model=runtime.context.answer_model
+            ),
             "nodes_executed": _executed(state, "answer"),
         },
     )
@@ -189,7 +195,9 @@ def review_graph_node(
     runtime: Runtime[GraphDependencies],
 ) -> dict[str, object]:
     """Graph adapter for the groundedness review node."""
-    result = reviewer_node(state, config=get_config(), model=runtime.context.reviewer_model)
+    result = reviewer_node(
+        state, config=get_config(), model=runtime.context.reviewer_model
+    )
     result["nodes_executed"] = _executed(state, "review")
     return result
 

@@ -98,5 +98,3 @@ async def on_message(message: cl.Message) -> None:
                 await step.update()
     except (ValueError, TypeError, RuntimeError) as exc:
         await cl.Message(content=f"{RUNTIME_ERROR_MESSAGE}\n\nDetails: {exc}").send()
-
-

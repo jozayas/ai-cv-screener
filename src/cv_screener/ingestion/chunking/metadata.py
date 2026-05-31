@@ -1,5 +1,8 @@
 """Metadata extraction for chunk text."""
 
+import contextlib
+import io
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -19,6 +22,12 @@ from cv_screener.ingestion.chunking.common import (
 )
 from cv_screener.ingestion.chunking.schema import ChunkConfig
 from cv_screener.ingestion.parsing.schema import ParsedCV
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"Sentence of length \d+ has been truncated to 384",
+    category=UserWarning,
+)
 
 if TYPE_CHECKING:
     from phonenumbers.phonenumbermatcher import PhoneNumberMatch
@@ -57,10 +66,14 @@ class MetadataExtractor:
 
     def _get_model(self) -> _EntityPredictor:
         if self._model is None:
-            self._model = cast(
-                "_EntityPredictor",
-                GLiNER.from_pretrained(self._config.gliner_model_name),
-            )
+            with (
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self._model = cast(
+                    "_EntityPredictor",
+                    GLiNER.from_pretrained(self._config.gliner_model_name),
+                )
         return self._model
 
     def _predict_entities(

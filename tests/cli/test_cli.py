@@ -295,14 +295,23 @@ def test_ingest_command_orchestrates_pdf_ingestion(
 ) -> None:
     pdf_dir = tmp_path / "pdfs"
     pdf_dir.mkdir()
+    (pdf_dir / "candidate-1.pdf").write_bytes(b"%PDF-1.4")
+    (pdf_dir / "candidate-2.pdf").write_bytes(b"%PDF-1.4")
     calls: list[tuple[str, object, object | None]] = []
 
     class FakeIngestionService:
         def __init__(self, *, pdf_dir: Path) -> None:
             calls.append(("ingest_init", pdf_dir, None))
 
-        def ingest(self, *, reset: bool = False) -> object:
-            calls.append(("ingest", reset, None))
+        def ingest(
+            self,
+            *,
+            reset: bool = False,
+            progress_callback: object | None = None,
+            expected_pdf_count: int | None = None,
+        ) -> object:
+            _ = expected_pdf_count
+            calls.append(("ingest", reset, progress_callback))
             return IngestionSummary(pdf_count=2, chunk_count=5, reset=reset)
 
     monkeypatch.setattr(
@@ -310,6 +319,7 @@ def test_ingest_command_orchestrates_pdf_ingestion(
         "build_cv_ingestion_service",
         FakeIngestionService,
     )
+    monkeypatch.setattr(cli_commands, "should_use_progress", lambda **_: False)
 
     result = runner.invoke(
         cli_app,
@@ -329,6 +339,53 @@ def test_ingest_command_orchestrates_pdf_ingestion(
         ("ingest", True, None),
     ]
     assert result.stdout == f"Ingested 2 PDFs into 5 chunks from {pdf_dir}.\n"
+
+
+def test_ingest_command_uses_progress_callback_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_dir = tmp_path / "pdfs"
+    pdf_dir.mkdir()
+    (pdf_dir / "candidate-1.pdf").write_bytes(b"%PDF-1.4")
+    (pdf_dir / "candidate-2.pdf").write_bytes(b"%PDF-1.4")
+    captured: dict[str, object | None] = {"callback": None}
+
+    class FakeIngestionService:
+        def __init__(self, *, pdf_dir: Path) -> None:
+            _ = pdf_dir
+
+        def ingest(
+            self,
+            *,
+            reset: bool = False,
+            progress_callback: object | None = None,
+            expected_pdf_count: int | None = None,
+        ) -> object:
+            _ = (reset, expected_pdf_count)
+            captured["callback"] = progress_callback
+            return IngestionSummary(pdf_count=2, chunk_count=5, reset=False)
+
+    monkeypatch.setattr(
+        cli_commands,
+        "build_cv_ingestion_service",
+        FakeIngestionService,
+    )
+    monkeypatch.setattr(cli_commands, "should_use_progress", lambda **_: True)
+
+    result = runner.invoke(
+        cli_app,
+        [
+            "--color",
+            "never",
+            "ingest",
+            "--pdf-dir",
+            str(pdf_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert callable(captured["callback"])
 
 
 def test_query_command_runs_rag_service_and_prints_grounded_answer(

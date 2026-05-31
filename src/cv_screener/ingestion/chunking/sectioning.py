@@ -1,5 +1,12 @@
 """Heading-based section classification for parsed CV content."""
 
+import contextlib
+import functools
+import io
+import logging
+import os
+import warnings
+
 import numpy as np
 from fastembed import TextEmbedding
 from langchain_text_splitters import MarkdownHeaderTextSplitter
@@ -10,6 +17,17 @@ from cv_screener.ingestion.chunking.schema import ChunkConfig
 MARKDOWN_SPLITTER = MarkdownHeaderTextSplitter(
     headers_to_split_on=[("##", "section")],
 )
+
+
+@functools.lru_cache(maxsize=1)
+def _configure_hf_noise() -> None:
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+    warnings.filterwarnings(
+        "ignore",
+        message="The `resume_download` argument is deprecated and ignored.*",
+        category=UserWarning,
+    )
 
 
 def cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
@@ -33,15 +51,25 @@ class SectionClassifier:
     def model(self) -> TextEmbedding:
         """Return the lazily initialized embedding model."""
         if self._model is None:
-            self._model = TextEmbedding(model_name=self._config.model_name)
+            _configure_hf_noise()
+            with (
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self._model = TextEmbedding(model_name=self._config.model_name)
         return self._model
 
     def section_vectors(self) -> np.ndarray:
         """Embed configured canonical sections once and reuse them."""
         if self._section_vectors is None:
-            embeddings = np.vstack(
-                list(self.model.embed(self._config.canonical_sections))
-            )
+            _configure_hf_noise()
+            with (
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                embeddings = np.vstack(
+                    list(self.model.embed(self._config.canonical_sections))
+                )
             self._section_vectors = embeddings
         return self._section_vectors
 
@@ -51,7 +79,12 @@ class SectionClassifier:
         if not cleaned:
             return _HEADER_SECTION
 
-        heading_vector = next(iter(self.model.embed([cleaned])))
+        _configure_hf_noise()
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            heading_vector = next(iter(self.model.embed([cleaned])))
         similarities = [
             cosine_similarity(section_vector, heading_vector)
             for section_vector in self.section_vectors()

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
-    from pathlib import Path
 
     from cv_screener.cli.serve import ChainlitLauncher
     from cv_screener.cv_generation.pdf.templates import TemplateId
@@ -31,7 +31,13 @@ class PDFRenderingServiceProtocol(Protocol):
 class CVIngestionServiceProtocol(Protocol):
     """Behavior needed from the ingestion service in CLI commands."""
 
-    def ingest(self, *, reset: bool = False) -> IngestionSummary:
+    def ingest(
+        self,
+        *,
+        reset: bool = False,
+        progress_callback: object | None = None,
+        expected_pdf_count: int | None = None,
+    ) -> IngestionSummary:
         """Parse, chunk, and index rendered CV PDFs."""
         ...
 
@@ -76,8 +82,19 @@ def build_pdf_rendering_service(
 
 def build_cv_ingestion_service(*, pdf_dir: Path) -> CVIngestionServiceProtocol:
     """Build the ingestion service lazily to keep CLI import overhead low."""
-    module = import_module("cv_screener.ingestion.ingest")
-    service = module.CVIngestionService(pdf_dir=pdf_dir)
+    ingestion_module = import_module("cv_screener.ingestion.ingest")
+    config_module = import_module("cv_screener.config")
+    persistence_module = import_module("cv_screener.persistence")
+
+    sqlite_settings = config_module.SQLiteSettings()
+    canonical_store = persistence_module.SQLiteCanonicalRepository(
+        sqlite_path=Path(sqlite_settings.sqlite_path),
+        content_dir=Path("data/cvs_contents"),
+    )
+    service = ingestion_module.CVIngestionService(
+        pdf_dir=pdf_dir,
+        canonical_store=canonical_store,
+    )
     return cast("CVIngestionServiceProtocol", service)
 
 
