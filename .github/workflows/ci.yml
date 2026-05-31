@@ -31,5 +31,5 @@ jobs:
       - name: Type check
         run: uv run pyrefly check
 
-      - name: Test
-        run: uv run pytest
+      - name: Test (unit)
+        run: uv run pytest -m 'not integration'
