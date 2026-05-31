@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from cv_screener.rag.graph import CompiledRAGGraph, GraphDependencies, build_rag_graph
 from cv_screener.rag.nodes import (
@@ -17,6 +17,8 @@ from cv_screener.rag.nodes import (
 from cv_screener.retrieval.hybrid import HybridRetriever
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from cv_screener.rag.state import RAGState
 
 
@@ -70,3 +72,20 @@ class RAGQueryService:
             raise ValueError(msg)
 
         return RAGQueryResult(final_text=final_text, state=state)
+
+    async def async_stream(
+        self, query_text: str
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Yield (node_name, state_update) as each graph node completes."""
+        normalized_query = query_text.strip()
+        if not normalized_query:
+            msg = "query_text must be a non-empty string"
+            raise ValueError(msg)
+
+        async for event in self._graph.astream(
+            {"user_query": normalized_query},
+            context=self._dependencies,
+            stream_mode="updates",
+        ):
+            for node_name, state_update in event.items():
+                yield node_name, state_update

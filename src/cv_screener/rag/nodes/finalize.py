@@ -16,23 +16,27 @@ if TYPE_CHECKING:
     from cv_screener.rag.state import RAGState
 
 
-def finalize_node(state: RAGState) -> dict[str, str]:
+def finalize_node(state: RAGState) -> dict[str, object]:
     """Produce the user-visible response for terminal graph routes."""
     route = state.get("route")
     if not isinstance(route, RouteDecision):
         msg = "finalize state must include a route decision"
         raise TypeError(msg)
 
+    result: dict[str, object] = {
+        "nodes_executed": [*state.get("nodes_executed", []), "finalize"]
+    }
+
     if route.route is not RouteTarget.CV_QUERY:
         brief_answer = state.get("brief_answer")
-        if not isinstance(brief_answer, BriefAnswerOutput):
-            return {}
-        return {"final_text": brief_answer.text}
+        if isinstance(brief_answer, BriefAnswerOutput):
+            result["final_text"] = brief_answer.text
+        return result
 
     answer = state.get("answer")
-    if not isinstance(answer, AnswerOutput):
-        return {}
-    return {"final_text": format_answer(answer)}
+    if isinstance(answer, AnswerOutput):
+        result["final_text"] = format_answer(answer)
+    return result
 
 
 def _citation_label(citation: AnswerCitation) -> str:

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
     from pathlib import Path
 
     from cv_screener.cli.serve import ChainlitLauncher
@@ -48,6 +49,12 @@ class RAGQueryServiceProtocol(Protocol):
 
     def run(self, query_text: str) -> RAGQueryResult:
         """Return the final RAG response for the given query."""
+        ...
+
+    def async_stream(
+        self, query_text: str
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Yield (node_name, state_update) as each graph node completes."""
         ...
 
 

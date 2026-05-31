@@ -2,20 +2,47 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import chainlit as cl
+from chainlit.config import config
 
-from cv_screener.chainlit.ui import (
-    EMPTY_QUERY_MESSAGE,
-    RUNTIME_ERROR_MESSAGE,
-    WELCOME_MESSAGE,
-    format_chat_response,
-)
+from cv_screener.chainlit.ui import EMPTY_QUERY_MESSAGE, RUNTIME_ERROR_MESSAGE
 from cv_screener.cli.dependencies import (
     RAGQueryServiceProtocol,
     build_rag_query_service,
 )
+
+config.ui.cot = "tool_call"
+
+NODE_LABELS: dict[str, str] = {
+    "router": "Router",
+    "brief_answer": "Quick Answer",
+    "planner": "Search Planner",
+    "retrieve": "CV Retriever",
+    "rerank": "Result Reranker",
+    "answer": "Answer Generator",
+    "review": "Answer Reviewer",
+}
+
+
+def _step_summary(node_name: str, state_update: dict[str, Any]) -> str:
+    if node_name == "planner":
+        planner = state_update.get("planner")
+        return f"query: {planner.primary_query}" if planner else ""
+    if node_name == "retrieve":
+        chunks = state_update.get("retrieved_chunks", [])
+        return f"{len(chunks)} chunks found"
+    if node_name == "rerank":
+        chunks = state_update.get("reranked_chunks", [])
+        return f"top {len(chunks)} results"
+    if node_name == "answer":
+        answer = state_update.get("answer")
+        return "generated" if answer else ""
+    if node_name == "review":
+        review = state_update.get("review")
+        return review.verdict if review else ""
+    return ""
 
 
 def _get_query_service() -> RAGQueryServiceProtocol:
@@ -30,32 +57,46 @@ def _get_query_service() -> RAGQueryServiceProtocol:
     return service
 
 
-@cl.on_chat_start
-async def on_chat_start() -> None:
-    """Show a concise introduction when a chat starts."""
-    _ = await cl.Message(content=WELCOME_MESSAGE).send()
-
-
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
     """Answer questions against the indexed CV corpus."""
     query_text = message.content.strip()
     if not query_text:
-        _ = await cl.Message(content=EMPTY_QUERY_MESSAGE).send()
+        await cl.Message(content=EMPTY_QUERY_MESSAGE).send()
         return
 
     try:
-        async with cl.Step(name="Searching CVs") as step:
-            step.input = query_text
-            service = _get_query_service()
-            result = await cl.make_async(service.run)(query_text)
-            step.output = "Done"
+        service = _get_query_service()
+        step: cl.Step | None = None
 
-        formatted = format_chat_response(result)
         msg = cl.Message(content="")
         await msg.send()
-        for token in formatted.split(" "):
-            await msg.stream_token(token + " ")
-        await msg.update()
+
+        async for node_name, state_update in service.async_stream(query_text):
+            if step is None:
+                step = cl.Step(
+                    name=NODE_LABELS.get(node_name, node_name),
+                    type="tool",
+                )
+                step.streaming = True
+                await step.send()
+
+            step.name = NODE_LABELS.get(node_name, node_name)
+            step.output = _step_summary(node_name, state_update)
+
+            if node_name == "finalize":
+                step.streaming = False
+                await step.update()
+                await step.remove()
+                final_text = state_update.get("final_text", "")
+                if final_text:
+                    for token in final_text.split(" "):
+                        await msg.stream_token(token + " ")
+                    await msg.update()
+            else:
+                step.streaming = False
+                await step.update()
     except (ValueError, TypeError, RuntimeError) as exc:
-        _ = await cl.Message(content=f"{RUNTIME_ERROR_MESSAGE}\n\nDetails: {exc}").send()
+        await cl.Message(content=f"{RUNTIME_ERROR_MESSAGE}\n\nDetails: {exc}").send()
+
+
