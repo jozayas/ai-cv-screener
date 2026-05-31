@@ -62,6 +62,10 @@ Follow the idiomatic usage of the libraries in this stack:
 * LangSmith: keep tracing optional and non-blocking; do not make the main local workflow depend on LangSmith being configured.
 * Docker Compose: keep local infrastructure minimal, explicit, and aligned with the development workflow rather than production orchestration.
 
+Before ignoring, suppressing, or weakening any lint rule or typing rule, ask the user what to do.
+
+Always use the `using-agent-skills` skill at the beginning of a session.
+
 ## Required Architecture
 
 ```txt
