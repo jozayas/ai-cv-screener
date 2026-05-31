@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from qdrant_client.http.models import VectorParams
+from qdrant_client.http.models import SparseVectorParams, VectorParams
 
 import cv_screener.ingestion.indexing.qdrant as qdrant_module
 from cv_screener.ingestion.chunking.schema import Chunk
+from cv_screener.ingestion.indexing.points import (
+    build_payload,
+    document_id_for_chunk,
+    point_id_for_chunk,
+)
 from cv_screener.ingestion.indexing.qdrant import QdrantChunkIndexer
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
 
@@ -17,8 +22,8 @@ if TYPE_CHECKING:
 
 
 class FakeEmbeddingModel:
-    def __init__(self, vectors: list[list[float]]) -> None:
-        self._vectors: list[list[float]] = vectors
+    def __init__(self, vectors: list[list[float]] | None = None, **_kwargs: object) -> None:
+        self._vectors: list[list[float]] = vectors or [[0.1, 0.2, 0.3]]
         self.calls: list[list[str]] = []
 
     def embed(
@@ -36,10 +41,22 @@ class FakeEmbeddingModel:
         return self._vectors
 
 
+class FakeBM25Encoder:
+    """Fake BM25 encoder compatible with BM25EncoderProtocol."""
+
+    def __init__(self, model_name: str = "Qdrant/bm25") -> None:
+        del model_name
+
+    def encode(self, texts: list[str]) -> list[dict[int, float]]:
+        return [{1: 1.0, 2: 0.5} for _ in texts]
+
+
 class FakeQdrantClient:
-    def __init__(self, *, exists: bool) -> None:
+    """Fake Qdrant client that captures calls for test assertions."""
+
+    def __init__(self, *, exists: bool = False, **_kwargs: object) -> None:
         self.exists: bool = exists
-        self.created: list[tuple[str, VectorParams | dict[str, VectorParams] | None]] = []
+        self.created: list[tuple[str, object, object]] = []
         self.deleted: list[str] = []
         self.uploads: list[
             tuple[str, list[PointStruct], int, int, int, bool]
@@ -53,29 +70,28 @@ class FakeQdrantClient:
         self,
         collection_name: str,
         vectors_config: VectorParams | dict[str, VectorParams] | None = None,
-        **kwargs: object,
+        sparse_vectors_config: dict[str, SparseVectorParams] | None = None,
+        **_kwargs: object,
     ) -> bool:
-        del kwargs
-        self.created.append((collection_name, vectors_config))
+        self.created.append((collection_name, vectors_config, sparse_vectors_config))
         self.exists = True
         return True
 
-    def delete_collection(self, collection_name: str, **kwargs: object) -> bool:
-        del kwargs
+    def delete_collection(self, collection_name: str, **_kwargs: object) -> bool:
         self.deleted.append(collection_name)
         self.exists = False
         return True
 
-    def upload_points(  # noqa: PLR0913
+    def upload_points(
         self,
         collection_name: str,
         points: Iterable[PointStruct],
-        *,
-        batch_size: int = 64,
-        parallel: int = 1,
-        max_retries: int = 3,
-        wait: bool = True,
+        **kwargs: object,
     ) -> None:
+        batch_size = cast("int", kwargs.get("batch_size", 64))
+        parallel = cast("int", kwargs.get("parallel", 1))
+        max_retries = cast("int", kwargs.get("max_retries", 3))
+        wait = cast("bool", kwargs.get("wait", True))
         self.uploads.append(
             (collection_name, list(points), batch_size, parallel, max_retries, wait)
         )
@@ -106,13 +122,8 @@ def _make_chunk(
 
 def test_payload_contains_chunk_metadata_and_index_identity() -> None:
     chunk = _make_chunk()
-    indexer = QdrantChunkIndexer(
-        config=QdrantIndexConfig(vector_size=3),
-        client=FakeQdrantClient(exists=False),
-        embedding_model=FakeEmbeddingModel([[0.1, 0.2, 0.3]]),
-    )
 
-    payload = indexer.build_payload(chunk)
+    payload = build_payload(chunk)
 
     assert payload["candidate_name"] == "Marta Alvarez"
     assert payload["source_file"] == "marta-alvarez.pdf"
@@ -122,27 +133,46 @@ def test_payload_contains_chunk_metadata_and_index_identity() -> None:
     assert payload["section"] == "EXPERIENCE"
     assert payload["detected_skills"] == ["Python", "FastAPI"]
     assert payload["text"] == "Built Python APIs at NovaStack."
-    assert payload["document_id"] == indexer.document_id_for_chunk(chunk)
+    assert payload["document_id"] == document_id_for_chunk(chunk)
 
 
 def test_point_id_is_deterministic_for_same_chunk() -> None:
     chunk = _make_chunk()
-    indexer = QdrantChunkIndexer(
-        config=QdrantIndexConfig(vector_size=3),
-        client=FakeQdrantClient(exists=False),
-        embedding_model=FakeEmbeddingModel([[0.1, 0.2, 0.3]]),
-    )
 
-    point_id = indexer.point_id_for_chunk(chunk)
+    pid = point_id_for_chunk(chunk)
 
-    assert point_id == indexer.point_id_for_chunk(chunk)
-    assert point_id != indexer.point_id_for_chunk(_make_chunk(chunk_index=3))
+    assert pid == point_id_for_chunk(chunk)
+    assert pid != point_id_for_chunk(_make_chunk(chunk_index=3))
 
 
-def test_ensure_collection_creates_missing_collection() -> None:
+def test_ensure_collection_with_bm25_uses_named_dense_and_sparse_config() -> None:
     client = FakeQdrantClient(exists=False)
     indexer = QdrantChunkIndexer(
-        config=QdrantIndexConfig(vector_size=3, distance="dot"),
+        config=QdrantIndexConfig(vector_size=3, distance="dot", enable_bm25=True),
+        client=client,
+        embedding_model=FakeEmbeddingModel([[0.1, 0.2, 0.3]]),
+        bm25_encoder=FakeBM25Encoder(),
+    )
+
+    indexer.ensure_collection()
+
+    assert client.created
+    collection_name, vectors_config, sparse_config = client.created[0]
+    assert collection_name == "cv_chunks"
+    assert isinstance(vectors_config, dict)
+    assert "dense" in vectors_config
+    assert isinstance(vectors_config["dense"], VectorParams)
+    assert vectors_config["dense"].size == 3
+    assert vectors_config["dense"].distance.name == "DOT"
+    assert isinstance(sparse_config, dict)
+    assert "bm25" in sparse_config
+    assert isinstance(sparse_config["bm25"], SparseVectorParams)
+
+
+def test_ensure_collection_without_bm25_uses_unnamed_dense_config() -> None:
+    client = FakeQdrantClient(exists=False)
+    indexer = QdrantChunkIndexer(
+        config=QdrantIndexConfig(vector_size=3, distance="dot", enable_bm25=False),
         client=client,
         embedding_model=FakeEmbeddingModel([[0.1, 0.2, 0.3]]),
     )
@@ -150,12 +180,12 @@ def test_ensure_collection_creates_missing_collection() -> None:
     indexer.ensure_collection()
 
     assert client.created
-    collection_name, vectors_config = client.created[0]
+    collection_name, vectors_config, sparse_config = client.created[0]
     assert collection_name == "cv_chunks"
-    assert vectors_config is not None
     assert isinstance(vectors_config, VectorParams)
     assert vectors_config.size == 3
     assert vectors_config.distance.name == "DOT"
+    assert sparse_config is None
 
 
 def test_ensure_collection_recreates_on_reset() -> None:
@@ -164,6 +194,7 @@ def test_ensure_collection_recreates_on_reset() -> None:
         config=QdrantIndexConfig(vector_size=3),
         client=client,
         embedding_model=FakeEmbeddingModel([[0.1, 0.2, 0.3]]),
+        bm25_encoder=FakeBM25Encoder(),
     )
 
     indexer.ensure_collection(reset=True)
@@ -172,16 +203,18 @@ def test_ensure_collection_recreates_on_reset() -> None:
     assert len(client.created) == 1
 
 
-def test_index_chunks_embeds_text_and_uploads_points() -> None:
+def test_index_chunks_embeds_text_and_uploads_points_with_bm25() -> None:
     chunk = _make_chunk()
     client = FakeQdrantClient(exists=False)
     embedding_model = FakeEmbeddingModel([[0.1, 0.2, 0.3]])
+    bm25_encoder = FakeBM25Encoder()
     indexer = QdrantChunkIndexer(
         config=QdrantIndexConfig(
             vector_size=3, batch_size=16, parallel=2, max_retries=5, wait=True
         ),
         client=client,
         embedding_model=embedding_model,
+        bm25_encoder=bm25_encoder,
     )
 
     indexer.index_chunks([chunk])
@@ -194,10 +227,33 @@ def test_index_chunks_embeds_text_and_uploads_points() -> None:
     assert max_retries == 5
     assert wait
     point = next(iter(points))
-    assert point.id == indexer.point_id_for_chunk(chunk)
-    assert point.vector == [0.1, 0.2, 0.3]
+    assert point.id == point_id_for_chunk(chunk)
+    assert isinstance(point.vector, dict)
+    assert "dense" in point.vector
+    assert point.vector["dense"] == [0.1, 0.2, 0.3]
+    assert "bm25" in point.vector
     assert point.payload is not None
     assert point.payload["source_file"] == "marta-alvarez.pdf"
+
+
+def test_index_chunks_without_bm25_uses_unnamed_vectors() -> None:
+    chunk = _make_chunk()
+    client = FakeQdrantClient(exists=False)
+    embedding_model = FakeEmbeddingModel([[0.1, 0.2, 0.3]])
+    indexer = QdrantChunkIndexer(
+        config=QdrantIndexConfig(
+            vector_size=3, enable_bm25=False
+        ),
+        client=client,
+        embedding_model=embedding_model,
+    )
+
+    indexer.index_chunks([chunk])
+
+    assert len(client.uploads) == 1
+    _, points, *_ = client.uploads[0]
+    point = next(iter(points))
+    assert point.vector == [0.1, 0.2, 0.3]
 
 
 def test_indexer_uses_qdrant_settings_for_default_connection(
@@ -205,16 +261,14 @@ def test_indexer_uses_qdrant_settings_for_default_connection(
 ) -> None:
     captured: dict[str, object] = {}
 
-    class FakeQdrantClient:
+    class FakeQdrantClientWithCapture(FakeQdrantClient):
         def __init__(self, **kwargs: object) -> None:
+            super().__init__(exists=False, **kwargs)
             captured.update(kwargs)
 
-    class FakeTextEmbedding:
-        def __init__(self, model_name: str) -> None:
-            del model_name
-
-    monkeypatch.setattr(qdrant_module, "QdrantClient", FakeQdrantClient)
-    monkeypatch.setattr(qdrant_module, "TextEmbedding", FakeTextEmbedding)
+    monkeypatch.setattr(qdrant_module, "QdrantClient", FakeQdrantClientWithCapture)
+    monkeypatch.setattr(qdrant_module, "TextEmbedding", FakeEmbeddingModel)
+    monkeypatch.setattr(qdrant_module, "BM25Encoder", FakeBM25Encoder)
 
     _ = QdrantChunkIndexer()
 

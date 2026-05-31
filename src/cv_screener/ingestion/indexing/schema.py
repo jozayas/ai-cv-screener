@@ -38,6 +38,11 @@ class QdrantIndexConfig(BaseModel):
         default="cosine",
         description="Qdrant distance metric for semantic search.",
     )
+    dense_vector_name: str = Field(
+        default="dense",
+        min_length=1,
+        description="Named dense vector for semantic search when using multi-vector collections.",
+    )
     batch_size: int = Field(
         default=64,
         ge=1,
@@ -56,4 +61,18 @@ class QdrantIndexConfig(BaseModel):
     wait: bool = Field(
         default=True,
         description="Wait for Qdrant to apply writes before returning.",
+    )
+    sparse_vector_name: str = Field(
+        default="bm25",
+        min_length=1,
+        description="Named sparse vector for BM25 keyword search in Qdrant.",
+    )
+    enable_bm25: bool = Field(
+        default=True,
+        description="Whether to build and upload BM25 sparse vectors alongside dense vectors.",
+    )
+    bm25_model_name: str = Field(
+        default="Qdrant/bm25",
+        min_length=1,
+        description="FastEmbed BM25 model name for sparse vector encoding.",
     )
