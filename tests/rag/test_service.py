@@ -132,7 +132,7 @@ def test_rag_query_service_async_stream_yields_per_node_events() -> None:
     async def _collect() -> list[tuple[str, dict[str, object]]]:
         result: list[tuple[str, dict[str, object]]] = []
         async for node_name, state_update in service.async_stream(
-            "Who has Python experience?"
+            "Who has Python backend experience?"
         ):
             result.append((node_name, state_update))
         return result

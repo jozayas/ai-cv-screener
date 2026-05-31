@@ -120,7 +120,12 @@ def _is_targeted_lookup_query(lowered: str) -> bool:
     if skill_match is None:
         return False
     skill_tail = skill_match.group(1)
-    blocked_terms = ("experience", "background", "worked", "leadership")
+    has_simple_experience_skill = bool(
+        re.fullmatch(r"[a-z0-9+#./-]+\s+experience", skill_tail)
+    )
+    if "experience" in skill_tail:
+        return has_simple_experience_skill
+    blocked_terms = ("background", "worked", "leadership")
     return not any(term in skill_tail for term in blocked_terms)
 
 

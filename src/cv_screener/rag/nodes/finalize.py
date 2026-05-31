@@ -31,18 +31,7 @@ def finalize_node(state: RAGState) -> dict[str, object]:
     }
 
     if route.route is RouteTarget.FULL_CV:
-        full_cv = state.get("full_cv")
-        if isinstance(full_cv, FullCVOutput):
-            markdown = full_cv.parsed_markdown.strip()
-            text_parts = [
-                f"{full_cv.candidate_name} - {full_cv.source_file}",
-                markdown,
-                f"PDF: {full_cv.pdf_path}",
-            ]
-            result["final_text"] = "\n\n".join(part for part in text_parts if part)
-            result["full_cv"] = full_cv
-            result["targeted_lookup"] = state.get("targeted_lookup")
-        return result
+        return _finalize_full_cv(state, result)
 
     if (
         route.route is not RouteTarget.CV_QUERY
@@ -53,16 +42,9 @@ def finalize_node(state: RAGState) -> dict[str, object]:
             result["final_text"] = brief_answer.text
         return result
 
-    if route.route is RouteTarget.TARGETED_LOOKUP:
-        targeted_lookup = state.get("targeted_lookup")
-        if getattr(targeted_lookup, "response_mode", None) == "list_candidates":
-            retrieved_chunks = state.get("retrieved_chunks", [])
-            result["final_text"] = _format_candidate_list_response(
-                retrieved_chunks,
-                targeted_lookup,
-            )
-            result["targeted_lookup"] = targeted_lookup
-            return result
+    targeted_result = _finalize_targeted_lookup(state, result, route.route)
+    if targeted_result is not None:
+        return targeted_result
 
     answer = state.get("answer")
     if isinstance(answer, AnswerOutput):
@@ -72,6 +54,53 @@ def finalize_node(state: RAGState) -> dict[str, object]:
     if targeted_lookup is not None:
         result["targeted_lookup"] = targeted_lookup
     return result
+
+
+def _finalize_full_cv(
+    state: RAGState,
+    result: dict[str, object],
+) -> dict[str, object]:
+    full_cv = state.get("full_cv")
+    if isinstance(full_cv, FullCVOutput):
+        markdown = full_cv.parsed_markdown.strip()
+        text_parts = [
+            f"{full_cv.candidate_name} - {full_cv.source_file}",
+            markdown,
+            f"PDF: {full_cv.pdf_path}",
+        ]
+        result["final_text"] = "\n\n".join(part for part in text_parts if part)
+        result["full_cv"] = full_cv
+        result["targeted_lookup"] = state.get("targeted_lookup")
+    return result
+
+
+def _finalize_targeted_lookup(
+    state: RAGState,
+    result: dict[str, object],
+    route: RouteTarget,
+) -> dict[str, object] | None:
+    if route is not RouteTarget.TARGETED_LOOKUP:
+        return None
+
+    targeted_lookup = state.get("targeted_lookup")
+    response_mode = getattr(targeted_lookup, "response_mode", None)
+    if response_mode == "clarify":
+        clarification_message = getattr(targeted_lookup, "clarification_message", None)
+        if isinstance(clarification_message, str):
+            result["final_text"] = clarification_message
+            result["targeted_lookup"] = targeted_lookup
+        return result
+
+    if response_mode == "list_candidates":
+        retrieved_chunks = state.get("retrieved_chunks", [])
+        result["final_text"] = _format_candidate_list_response(
+            retrieved_chunks,
+            targeted_lookup,
+        )
+        result["targeted_lookup"] = targeted_lookup
+        return result
+
+    return None
 
 
 def _citation_label(citation: AnswerCitation) -> str:

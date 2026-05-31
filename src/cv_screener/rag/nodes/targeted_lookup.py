@@ -6,11 +6,11 @@ import re
 from typing import TYPE_CHECKING, Protocol
 
 from cv_screener.rag.schema import FullCVOutput, TargetedLookupOutput
+from cv_screener.retrieval.schema import RetrievedChunk
 
 if TYPE_CHECKING:
     from cv_screener.persistence.lookup import CandidateMatch, DocumentMatch
     from cv_screener.rag.state import RAGState
-    from cv_screener.retrieval.schema import RetrievedChunk
 
 
 class LookupServiceProtocol(Protocol):
@@ -18,6 +18,10 @@ class LookupServiceProtocol(Protocol):
 
     def find_candidate_by_name(self, name: str) -> CandidateMatch | None:
         """Find a candidate by exact full-name match."""
+        ...
+
+    def find_candidates_by_name(self, name: str) -> list[CandidateMatch]:
+        """Find all candidates matching the provided name."""
         ...
 
     def find_candidates_by_skill(self, skill_name: str) -> list[CandidateMatch]:
@@ -66,7 +70,7 @@ def hydrate_chunks_node(
         raise TypeError(msg)
     chunks = lookup_service.fetch_chunks(
         candidate_ids=lookup.candidate_ids,
-        sections=lookup.sections or None,
+        sections=None if lookup.response_mode == "profile" else lookup.sections or None,
     )
     return {"retrieved_chunks": chunks}
 
@@ -98,6 +102,59 @@ def return_cv_node(
     }
 
 
+def return_profile_cv_node(
+    state: RAGState,
+    *,
+    lookup_service: LookupServiceProtocol,
+) -> dict[str, FullCVOutput]:
+    """Resolve a targeted single-candidate profile query to the matched CV document."""
+    lookup = state.get("targeted_lookup")
+    if not isinstance(lookup, TargetedLookupOutput):
+        msg = "profile CV state must include targeted_lookup output"
+        raise TypeError(msg)
+    if lookup.response_mode != "profile" or len(lookup.candidate_names) != 1:
+        msg = "profile CV state must include a single targeted profile candidate"
+        raise ValueError(msg)
+
+    candidate_name = lookup.candidate_names[0]
+    match = lookup_service.find_document_by_candidate_name(candidate_name)
+    if match is None:
+        msg = f"No CV found for {candidate_name}."
+        raise ValueError(msg)
+    return {
+        "full_cv": FullCVOutput(
+            candidate_name=match.full_name,
+            source_file=match.source_file,
+            document_title=match.document_title,
+            pdf_path=match.pdf_path,
+            parsed_markdown=match.parsed_markdown,
+        )
+    }
+
+
+def full_cv_to_chunks_node(state: RAGState) -> dict[str, list[RetrievedChunk]]:
+    """Convert a resolved full CV document into a single answer-context chunk."""
+    full_cv = state.get("full_cv")
+    if not isinstance(full_cv, FullCVOutput):
+        msg = "profile context state must include full_cv output"
+        raise TypeError(msg)
+
+    return {
+        "retrieved_chunks": [
+            RetrievedChunk(
+                candidate_name=full_cv.candidate_name,
+                source_file=full_cv.source_file,
+                document_title=full_cv.document_title,
+                page=1,
+                section="FULL_CV",
+                text=full_cv.parsed_markdown,
+                score=1.0,
+                rank=1,
+            )
+        ]
+    }
+
+
 def _resolve_lookup(
     user_query: str,
     *,
@@ -121,8 +178,8 @@ def _resolve_lookup(
         r"\bwho (?:has|knows)\s+(.+?)[?.!]*$", user_query, re.IGNORECASE
     )
     if skill_match is not None:
-        skill = skill_match.group(1).strip()
-        blocked_terms = ("experience", "background", "worked", "leadership")
+        skill = _normalize_skill_lookup(skill_match.group(1))
+        blocked_terms = ("background", "worked", "leadership")
         if not any(term in skill.casefold() for term in blocked_terms):
             candidates = lookup_service.find_candidates_by_skill(skill)
             return TargetedLookupOutput(
@@ -140,16 +197,50 @@ def _resolve_lookup(
     )
     if profile_match is not None:
         candidate_name = profile_match.group(1).strip()
-        candidate = lookup_service.find_candidate_by_name(candidate_name)
+        candidates = lookup_service.find_candidates_by_name(candidate_name)
+        if not candidates:
+            return TargetedLookupOutput(
+                response_mode="clarify",
+                clarification_message=(
+                    f"I couldn't find a candidate matching '{candidate_name}'. "
+                    "Please provide the full name."
+                ),
+                fallback_to_semantic=False,
+            )
+        if len(candidates) > 1:
+            names = ", ".join(candidate.full_name for candidate in candidates)
+            return TargetedLookupOutput(
+                candidate_ids=[candidate.candidate_id for candidate in candidates],
+                candidate_names=[candidate.full_name for candidate in candidates],
+                response_mode="clarify",
+                clarification_message=(
+                    f"I found multiple candidates matching '{candidate_name}': "
+                    f"{names}. Which one do you want?"
+                ),
+                fallback_to_semantic=False,
+            )
+        candidate = candidates[0]
         return TargetedLookupOutput(
-            candidate_ids=[] if candidate is None else [candidate.candidate_id],
-            candidate_names=[] if candidate is None else [candidate.full_name],
-            sections=["PROFILE", "SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS"],
+            candidate_ids=[candidate.candidate_id],
+            candidate_names=[candidate.full_name],
+            sections=[],
             response_mode="profile",
-            fallback_to_semantic=candidate is None,
+            fallback_to_semantic=False,
         )
 
     return TargetedLookupOutput(response_mode="profile", fallback_to_semantic=True)
+
+
+def _normalize_skill_lookup(raw_skill: str) -> str:
+    skill = raw_skill.strip()
+    experience_suffix = re.search(
+        r"^(?P<skill>.+?)\s+experience$",
+        skill,
+        re.IGNORECASE,
+    )
+    if experience_suffix is not None:
+        return experience_suffix.group("skill").strip()
+    return skill
 
 
 def _extract_candidate_name_for_cv(user_query: str) -> str:

@@ -117,6 +117,7 @@ class TargetedLookupOutput(BaseModel):
     candidate_names: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=list)
     response_mode: str = Field(default="profile")
+    clarification_message: str | None = Field(default=None, min_length=1)
     fallback_to_semantic: bool = Field(default=False)
 
 

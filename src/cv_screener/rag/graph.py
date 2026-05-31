@@ -18,8 +18,10 @@ from cv_screener.rag.nodes.review import reviewer_node
 from cv_screener.rag.nodes.route import next_node_for_route, router_node
 from cv_screener.rag.nodes.targeted_lookup import (
     LookupServiceProtocol,
+    full_cv_to_chunks_node,
     hydrate_chunks_node,
     return_cv_node,
+    return_profile_cv_node,
     targeted_lookup_node,
 )
 from cv_screener.rag.schema import (
@@ -84,6 +86,8 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_node("planner", planner_graph_node)
     _ = graph.add_node("targeted_lookup", targeted_lookup_graph_node)
     _ = graph.add_node("return_cv", return_cv_graph_node)
+    _ = graph.add_node("return_profile_cv", return_profile_cv_graph_node)
+    _ = graph.add_node("profile_context", profile_context_graph_node)
     _ = graph.add_node("retrieve", retrieve_graph_node)
     _ = graph.add_node("hydrate", hydrate_graph_node)
     _ = graph.add_node("rerank", rerank_graph_node)
@@ -95,6 +99,8 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_conditional_edges("router", _next_node_from_state)
     _ = graph.add_edge("brief_answer", "finalize")
     _ = graph.add_edge("return_cv", "finalize")
+    _ = graph.add_edge("return_profile_cv", "profile_context")
+    _ = graph.add_edge("profile_context", "answer")
     _ = graph.add_conditional_edges("targeted_lookup", _next_node_after_targeted_lookup)
     _ = graph.add_conditional_edges("hydrate", _next_node_after_hydrate)
     _ = graph.add_edge("planner", "retrieve")
@@ -190,17 +196,21 @@ def targeted_lookup_graph_node(
     )
 
 
-def _next_node_after_targeted_lookup(state: RAGState) -> Literal["hydrate", "planner"]:
+def _next_node_after_targeted_lookup(
+    state: RAGState,
+) -> Literal["hydrate", "planner", "finalize", "return_profile_cv"]:
     lookup = state.get("targeted_lookup")
     if isinstance(lookup, TargetedLookupOutput) and lookup.fallback_to_semantic:
         return "planner"
+    if isinstance(lookup, TargetedLookupOutput) and lookup.response_mode == "profile":
+        return "return_profile_cv"
     return "hydrate"
 
 
 def _next_node_after_hydrate(state: RAGState) -> Literal["answer", "finalize"]:
     lookup = state.get("targeted_lookup")
     if isinstance(lookup, TargetedLookupOutput):
-        if lookup.response_mode == "list_candidates":
+        if lookup.response_mode in {"list_candidates", "clarify"}:
             return "finalize"
         return "answer"
     return "answer"
@@ -230,6 +240,34 @@ def hydrate_graph_node(
         {
             **hydrate_chunks_node(state, lookup_service=runtime.context.lookup_service),
             "nodes_executed": _executed(state, "hydrate"),
+        },
+    )
+
+
+def return_profile_cv_graph_node(
+    state: RAGState,
+    runtime: Runtime[GraphDependencies],
+) -> dict[str, object]:
+    """Graph adapter for direct CV resolution of targeted profile queries."""
+    return cast(
+        "dict[str, object]",
+        {
+            **return_profile_cv_node(
+                state,
+                lookup_service=runtime.context.lookup_service,
+            ),
+            "nodes_executed": _executed(state, "return_profile_cv"),
+        },
+    )
+
+
+def profile_context_graph_node(state: RAGState) -> dict[str, object]:
+    """Graph adapter that turns a resolved CV into answer context."""
+    return cast(
+        "dict[str, object]",
+        {
+            **full_cv_to_chunks_node(state),
+            "nodes_executed": _executed(state, "profile_context"),
         },
     )
 
@@ -286,11 +324,17 @@ def _next_node_from_state(
     return next_node_for_route(route)
 
 
-def _next_node_after_targeted_lookup(state: RAGState) -> Literal["hydrate", "planner"]:
+def _next_node_after_targeted_lookup(
+    state: RAGState,
+) -> Literal["hydrate", "planner", "finalize", "return_profile_cv"]:
     lookup = state.get("targeted_lookup")
     if not isinstance(lookup, TargetedLookupOutput):
         msg = "targeted lookup state must include targeted_lookup output"
         raise TypeError(msg)
+    if lookup.response_mode == "clarify":
+        return "finalize"
+    if lookup.response_mode == "profile":
+        return "return_profile_cv"
     if lookup.fallback_to_semantic:
         return "planner"
     return "hydrate"
