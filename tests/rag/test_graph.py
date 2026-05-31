@@ -451,7 +451,7 @@ def test_graph_routes_full_cv_queries_to_return_cv() -> None:
     assert result.get("nodes_executed") == ["router", "return_cv", "finalize"]
 
 
-def test_graph_routes_targeted_lookup_queries_through_hydrate() -> None:
+def test_graph_routes_targeted_profile_queries_through_hydrate() -> None:
     hydrated = [
         RetrievedChunk(
             candidate_name="Jane Doe",
@@ -506,7 +506,9 @@ def test_graph_routes_targeted_lookup_queries_through_hydrate() -> None:
 
     assert result.get("targeted_lookup") == TargetedLookupOutput(
         candidate_ids=["cand-1"],
+        candidate_names=["Jane Doe"],
         sections=["PROFILE", "SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS"],
+        response_mode="profile",
         fallback_to_semantic=False,
     )
     assert result.get("retrieved_chunks") == hydrated
@@ -514,8 +516,90 @@ def test_graph_routes_targeted_lookup_queries_through_hydrate() -> None:
         "router",
         "targeted_lookup",
         "hydrate",
-        "rerank",
         "answer",
         "review",
+        "finalize",
+    ]
+
+
+def test_graph_routes_targeted_skill_queries_directly_from_sql() -> None:
+    hydrated = [
+        RetrievedChunk(
+            candidate_name="Marie Curie",
+            source_file="marie-curie.pdf",
+            document_title="Marie Curie CV",
+            page=1,
+            section="SKILLS",
+            text="Python, data analysis, research.",
+            score=1.0,
+            rank=1,
+        ),
+        RetrievedChunk(
+            candidate_name="Ada Lovelace",
+            source_file="ada-lovelace.pdf",
+            document_title="Ada Lovelace CV",
+            page=1,
+            section="SKILLS",
+            text="Python, algorithms, analytics.",
+            score=1.0,
+            rank=2,
+        ),
+    ]
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="Deterministic skill lookup.",
+            )
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="unused")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(
+            candidates_by_skill=[
+                FakeLookupCandidate("cand-1", "Marie Curie"),
+                FakeLookupCandidate("cand-2", "Ada Lovelace"),
+            ],
+            hydrated_chunks=hydrated,
+        ),
+        retriever=FakeRetriever([]),
+        reranker=FakeReranker([]),
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="unused",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        source_file="ignored.pdf",
+                        page=1,
+                        section="Skills",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke({"user_query": "Who knows Python?"}, context=dependencies)
+
+    assert result.get("targeted_lookup") == TargetedLookupOutput(
+        candidate_ids=["cand-1", "cand-2"],
+        candidate_names=["Marie Curie", "Ada Lovelace"],
+        sections=["SKILLS", "EXPERIENCE", "PROJECTS"],
+        response_mode="list_candidates",
+        fallback_to_semantic=False,
+    )
+    assert result.get("final_text") == (
+        "Candidates who match the query: Marie Curie [1], Ada Lovelace [2]\n\n"
+        "Sources:\n"
+        "[1] Marie Curie - marie-curie.pdf (page 1, SKILLS)\n"
+        "[2] Ada Lovelace - ada-lovelace.pdf (page 1, SKILLS)"
+    )
+    assert result.get("nodes_executed") == [
+        "router",
+        "targeted_lookup",
+        "hydrate",
         "finalize",
     ]

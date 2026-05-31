@@ -96,7 +96,7 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_edge("brief_answer", "finalize")
     _ = graph.add_edge("return_cv", "finalize")
     _ = graph.add_conditional_edges("targeted_lookup", _next_node_after_targeted_lookup)
-    _ = graph.add_edge("hydrate", "rerank")
+    _ = graph.add_conditional_edges("hydrate", _next_node_after_hydrate)
     _ = graph.add_edge("planner", "retrieve")
     _ = graph.add_edge("retrieve", "rerank")
     _ = graph.add_edge("rerank", "answer")
@@ -188,6 +188,22 @@ def targeted_lookup_graph_node(
             "nodes_executed": _executed(state, "targeted_lookup"),
         },
     )
+
+
+def _next_node_after_targeted_lookup(state: RAGState) -> Literal["hydrate", "planner"]:
+    lookup = state.get("targeted_lookup")
+    if isinstance(lookup, TargetedLookupOutput) and lookup.fallback_to_semantic:
+        return "planner"
+    return "hydrate"
+
+
+def _next_node_after_hydrate(state: RAGState) -> Literal["answer", "finalize"]:
+    lookup = state.get("targeted_lookup")
+    if isinstance(lookup, TargetedLookupOutput):
+        if lookup.response_mode == "list_candidates":
+            return "finalize"
+        return "answer"
+    return "answer"
 
 
 def return_cv_graph_node(

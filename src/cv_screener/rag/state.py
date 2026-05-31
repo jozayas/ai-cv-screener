@@ -35,6 +35,7 @@ class RAGState(TypedDict, total=False):
     """Shared state passed between RAG graph nodes."""
 
     user_query: str
+    conversation_context: str
     route: RouteDecision
     brief_answer: BriefAnswerOutput
     targeted_lookup: TargetedLookupOutput

@@ -325,3 +325,71 @@ def test_sqlite_lookup_service_matches_partial_accented_names(
     assert document is not None
     assert document.source_file == pdf_path.name
     assert document.parsed_markdown == parsed.full_text
+
+
+def test_sqlite_lookup_service_matches_fuzzy_misspellings(
+    tmp_path: Path,
+) -> None:
+    content_dir = tmp_path / "cvs_contents"
+    pdf_dir = tmp_path / "cv_pdfs"
+    content_dir.mkdir()
+    pdf_dir.mkdir()
+
+    candidate_id = uuid4()
+    profile = CVProfile.model_validate(
+        {
+            "candidate_id": str(candidate_id),
+            "full_name": "Alexandre Moreau",
+            "email": "alexandre@example.com",
+            "phone": "+33123456789",
+            "location": "Paris",
+            "professional_summary": "Platform engineer.",
+            "skills": ["Python"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "role": "Platform Engineer",
+                    "start_date": "2023-01-01",
+                    "end_date": None,
+                    "summary": "Built internal tooling.",
+                    "highlights": [],
+                    "technologies": [],
+                }
+            ],
+            "education": [
+                {
+                    "institution": "Université de Paris",
+                    "degree": "MSc",
+                    "field_of_study": "Computer Science",
+                    "graduation_year": 2022,
+                }
+            ],
+        }
+    )
+    yaml_path = content_dir / f"alexandre-moreau-{candidate_id}.yaml"
+    write_cv_profile(yaml_path, profile)
+
+    pdf_path = pdf_dir / f"alexandre-moreau-{candidate_id}.pdf"
+    parsed = ParsedCV(
+        source_path=pdf_path,
+        filename=pdf_path.stem,
+        title="Alexandre Moreau CV",
+        pages=[
+            ParsedPage(
+                page_number=1,
+                markdown="## **SUMMARY**\n\nPlatform engineer.",
+            )
+        ],
+    )
+    repository = SQLiteCanonicalRepository(
+        sqlite_path=tmp_path / "canonical.db",
+        content_dir=content_dir,
+    )
+    repository.persist(parsed_cvs=[parsed], chunks_to_store=[])
+
+    lookup = SQLiteLookupService(sqlite_path=tmp_path / "canonical.db")
+
+    match = lookup.find_candidate_by_name("Alexandre Morea")
+
+    assert match is not None
+    assert match.full_name == "Alexandre Moreau"

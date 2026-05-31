@@ -17,6 +17,7 @@ from cv_screener.rag.nodes import (
     build_reviewer_model,
     build_router_model,
 )
+from cv_screener.rag.state import RAGState
 from cv_screener.retrieval.hybrid import HybridRetriever
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ class RAGQueryService:
         *,
         graph: CompiledRAGGraph | None = None,
         dependencies: GraphDependencies | None = None,
+        candidate_name_min_score: float = 0.72,
     ) -> None:
         """Bind a compiled graph and its concrete runtime dependencies."""
         self._graph = graph or build_rag_graph()
@@ -50,6 +52,7 @@ class RAGQueryService:
             brief_answer_model=build_brief_answer_model(),
             lookup_service=SQLiteLookupService(
                 sqlite_path=Path(SQLiteSettings().sqlite_path),
+                candidate_name_min_score=candidate_name_min_score,
             ),
             retriever=HybridRetriever(),
             reranker=LocalReranker(),
@@ -80,7 +83,10 @@ class RAGQueryService:
         return RAGQueryResult(final_text=final_text, state=state)
 
     async def async_stream(
-        self, query_text: str
+        self,
+        query_text: str,
+        *,
+        conversation_context: str | None = None,
     ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         """Yield (node_name, state_update) as each graph node completes."""
         normalized_query = query_text.strip()
@@ -88,8 +94,12 @@ class RAGQueryService:
             msg = "query_text must be a non-empty string"
             raise ValueError(msg)
 
+        input_state: RAGState = {"user_query": normalized_query}
+        if conversation_context is not None and conversation_context.strip():
+            input_state["conversation_context"] = conversation_context.strip()
+
         async for event in self._graph.astream(
-            {"user_query": normalized_query},
+            input_state,
             context=self._dependencies,
             stream_mode="updates",
         ):

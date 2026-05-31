@@ -1,5 +1,18 @@
 """Prompt builders for the RAG graph nodes."""
 
+from __future__ import annotations
+
+
+def conversation_context_block(conversation_context: str | None) -> str:
+    """Render compact conversation memory for prompt injection."""
+    if conversation_context is None:
+        return ""
+    cleaned = conversation_context.strip()
+    if not cleaned:
+        return ""
+    return f"Conversation context:\n{cleaned}\n"
+
+
 ROUTER_SYSTEM_PROMPT = """You are the routing stage for a CV screening assistant.
 
 Classify the latest user message into exactly one route:

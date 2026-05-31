@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from sqlalchemy import create_engine, select
@@ -18,12 +19,40 @@ from cv_screener.persistence.schema import (
 )
 from cv_screener.retrieval.schema import RetrievedChunk
 
+_DEFAULT_MIN_NAME_MATCH_SCORE = 0.72
+
 
 def _normalize(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
     cleaned = re.sub(r"[^a-z0-9]+", " ", stripped.casefold())
     return " ".join(cleaned.split())
+
+
+def _name_match_score(
+    query_normalized: str,
+    query_tokens: list[str],
+    candidate_normalized: str,
+    candidate_tokens: list[str],
+) -> float:
+    if candidate_normalized == query_normalized:
+        return 1.0
+    if query_normalized and (
+        query_normalized in candidate_normalized
+        or candidate_normalized in query_normalized
+    ):
+        return 0.96
+    if query_tokens and all(token in candidate_tokens for token in query_tokens):
+        return 0.93
+    if query_tokens and candidate_tokens:
+        overlap = len(set(query_tokens) & set(candidate_tokens))
+        if overlap:
+            token_ratio = overlap / max(len(query_tokens), len(candidate_tokens))
+            sequence_ratio = SequenceMatcher(
+                None, query_normalized, candidate_normalized
+            ).ratio()
+            return max(token_ratio, sequence_ratio)
+    return SequenceMatcher(None, query_normalized, candidate_normalized).ratio()
 
 
 @dataclass(frozen=True)
@@ -49,19 +78,25 @@ class DocumentMatch:
 class SQLiteLookupService:
     """Deterministic lookup service over canonical SQLite data."""
 
-    def __init__(self, *, sqlite_path: Path) -> None:
+    def __init__(
+        self,
+        *,
+        sqlite_path: Path,
+        candidate_name_min_score: float = _DEFAULT_MIN_NAME_MATCH_SCORE,
+    ) -> None:
         """Create a lookup service backed by the canonical SQLite database."""
         self._engine = create_engine(f"sqlite:///{Path(sqlite_path)}", future=True)
+        self._candidate_name_min_score = candidate_name_min_score
 
     def find_candidate_by_name(self, name: str) -> CandidateMatch | None:
-        """Resolve a candidate by exact or partial normalized name."""
+        """Resolve a candidate by exact, partial, or fuzzy normalized name."""
         matches = self.find_candidates_by_name(name)
         if len(matches) == 1:
             return matches[0]
         return None
 
     def find_candidates_by_name(self, name: str) -> list[CandidateMatch]:
-        """Return candidates whose normalized names match the query tokens."""
+        """Return candidates whose normalized names best match the query."""
         normalized = _normalize(name)
         tokens = normalized.split()
         if not tokens:
@@ -71,32 +106,34 @@ class SQLiteLookupService:
         with self._engine.begin() as conn:
             rows = conn.execute(stmt).all()
 
-        exact_matches: list[CandidateMatch] = []
-        partial_matches: list[CandidateMatch] = []
+        scored_matches: list[tuple[float, CandidateMatch]] = []
         for row in rows:
             candidate_normalized = _normalize(row.full_name)
             candidate_tokens = candidate_normalized.split()
-            if candidate_normalized == normalized:
-                exact_matches.append(
-                    CandidateMatch(
-                        candidate_id=row.candidate_id,
-                        full_name=row.full_name,
-                    )
-                )
+            score = _name_match_score(
+                normalized,
+                tokens,
+                candidate_normalized,
+                candidate_tokens,
+            )
+            if score < self._candidate_name_min_score:
                 continue
-            if all(token in candidate_tokens for token in tokens):
-                partial_matches.append(
+            scored_matches.append(
+                (
+                    score,
                     CandidateMatch(
                         candidate_id=row.candidate_id,
                         full_name=row.full_name,
-                    )
+                    ),
                 )
+            )
 
-        if exact_matches:
-            return exact_matches
-        if len(partial_matches) == 1:
-            return partial_matches
-        return partial_matches
+        if not scored_matches:
+            return []
+
+        scored_matches.sort(key=lambda item: item[0], reverse=True)
+        best_score = scored_matches[0][0]
+        return [match for score, match in scored_matches if score == best_score]
 
     def find_candidates_by_skill(self, skill_name: str) -> list[CandidateMatch]:
         """Return all candidates that list the given skill."""
@@ -113,10 +150,16 @@ class SQLiteLookupService:
         )
         with self._engine.begin() as conn:
             rows = conn.execute(stmt).all()
-        return [
-            CandidateMatch(candidate_id=row.candidate_id, full_name=row.full_name)
-            for row in rows
-        ]
+        seen: set[str] = set()
+        matches: list[CandidateMatch] = []
+        for row in rows:
+            if row.candidate_id in seen:
+                continue
+            seen.add(row.candidate_id)
+            matches.append(
+                CandidateMatch(candidate_id=row.candidate_id, full_name=row.full_name)
+            )
+        return matches
 
     def find_candidates_by_education(self, institution: str) -> list[CandidateMatch]:
         """Return all candidates who studied at the given institution."""
@@ -133,10 +176,16 @@ class SQLiteLookupService:
         )
         with self._engine.begin() as conn:
             rows = conn.execute(stmt).all()
-        return [
-            CandidateMatch(candidate_id=row.candidate_id, full_name=row.full_name)
-            for row in rows
-        ]
+        seen: set[str] = set()
+        matches: list[CandidateMatch] = []
+        for row in rows:
+            if row.candidate_id in seen:
+                continue
+            seen.add(row.candidate_id)
+            matches.append(
+                CandidateMatch(candidate_id=row.candidate_id, full_name=row.full_name)
+            )
+        return matches
 
     def find_document_by_candidate_name(self, name: str) -> DocumentMatch | None:
         """Return the full document metadata for a candidate, or ``None``."""

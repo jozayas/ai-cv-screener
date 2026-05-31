@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from cv_screener.rag.llm import build_structured_output_model, invoke_structured_output
-from cv_screener.rag.prompts import ROUTER_SYSTEM_PROMPT
+from cv_screener.rag.prompts import (
+    ROUTER_SYSTEM_PROMPT,
+    conversation_context_block,
+)
 from cv_screener.rag.schema import RouteDecision, RouteTarget
 
 if TYPE_CHECKING:
@@ -31,10 +34,11 @@ def route_query(
     *,
     model: Runnable[LanguageModelInput, RouteDecision],
     config: RunnableConfig | None = None,
+    conversation_context: str | None = None,
 ) -> RouteDecision:
     """Classify a user query using structured output."""
     return invoke_structured_output(
-        _build_messages(user_query),
+        _build_messages(user_query, conversation_context=conversation_context),
         model=model,
         schema=RouteDecision,
         label="router",
@@ -56,7 +60,17 @@ def router_node(
     deterministic = _deterministic_route(user_query)
     if deterministic is not None:
         return {"route": deterministic}
-    return {"route": route_query(user_query, model=model, config=config)}
+    conversation_context = state.get("conversation_context")
+    if not isinstance(conversation_context, str):
+        conversation_context = None
+    return {
+        "route": route_query(
+            user_query,
+            model=model,
+            config=config,
+            conversation_context=conversation_context,
+        )
+    }
 
 
 def next_node_for_route(
@@ -102,7 +116,7 @@ def _is_targeted_lookup_query(lowered: str) -> bool:
         return True
     if re.search(r"\bsummarize\b", lowered) and "experience" not in lowered:
         return True
-    skill_match = re.search(r"\bwho has\s+(.+?)[?.!]*$", lowered)
+    skill_match = re.search(r"\bwho (?:has|knows)\s+(.+?)[?.!]*$", lowered)
     if skill_match is None:
         return False
     skill_tail = skill_match.group(1)
@@ -110,8 +124,20 @@ def _is_targeted_lookup_query(lowered: str) -> bool:
     return not any(term in skill_tail for term in blocked_terms)
 
 
-def _build_messages(user_query: str) -> list[SystemMessage | HumanMessage]:
+def _build_messages(
+    user_query: str,
+    *,
+    conversation_context: str | None = None,
+) -> list[SystemMessage | HumanMessage]:
+    context_block = conversation_context_block(conversation_context)
+    human_content = "\n".join(
+        [
+            part
+            for part in [context_block.rstrip(), f"User message: {user_query}"]
+            if part
+        ]
+    )
     return [
         SystemMessage(content=ROUTER_SYSTEM_PROMPT),
-        HumanMessage(content=user_query),
+        HumanMessage(content=human_content),
     ]

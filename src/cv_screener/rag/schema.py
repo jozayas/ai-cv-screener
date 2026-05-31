@@ -114,7 +114,9 @@ class TargetedLookupOutput(BaseModel):
     """Deterministic SQLite lookup result used before hydration."""
 
     candidate_ids: list[str] = Field(default_factory=list)
+    candidate_names: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=list)
+    response_mode: str = Field(default="profile")
     fallback_to_semantic: bool = Field(default=False)
 
 

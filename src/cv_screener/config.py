@@ -23,6 +23,8 @@ class GenerationSettings(BaseSettings):
     generation_retry_base_delay_seconds: float = Field(default=0.5, ge=0.05, le=30)
     generation_retry_max_delay_seconds: float = Field(default=8.0, ge=0.1, le=120)
     image_generation_max_concurrency: int = Field(default=1, ge=1, le=8)
+    image_generation_model: str = Field(default="gpt-image-1")
+    image_generation_size: str = Field(default="1024x1024")
 
 
 class QdrantSettings(BaseSettings):
@@ -79,3 +81,15 @@ class SQLiteSettings(BaseSettings):
     )
 
     sqlite_path: str = Field(default="data/cv_screener.db")
+
+
+class LookupSettings(BaseSettings):
+    """Settings for deterministic SQLite lookup behavior."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    candidate_name_min_score: float = Field(default=0.72, ge=0, le=1)

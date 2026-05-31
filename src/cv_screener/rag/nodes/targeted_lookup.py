@@ -111,11 +111,15 @@ def _resolve_lookup(
         candidates = lookup_service.find_candidates_by_education(institution)
         return TargetedLookupOutput(
             candidate_ids=[candidate.candidate_id for candidate in candidates],
+            candidate_names=[candidate.full_name for candidate in candidates],
             sections=["EDUCATION"],
+            response_mode="list_candidates",
             fallback_to_semantic=not candidates,
         )
 
-    skill_match = re.search(r"\bwho has\s+(.+?)[?.!]*$", user_query, re.IGNORECASE)
+    skill_match = re.search(
+        r"\bwho (?:has|knows)\s+(.+?)[?.!]*$", user_query, re.IGNORECASE
+    )
     if skill_match is not None:
         skill = skill_match.group(1).strip()
         blocked_terms = ("experience", "background", "worked", "leadership")
@@ -123,7 +127,9 @@ def _resolve_lookup(
             candidates = lookup_service.find_candidates_by_skill(skill)
             return TargetedLookupOutput(
                 candidate_ids=[candidate.candidate_id for candidate in candidates],
+                candidate_names=[candidate.full_name for candidate in candidates],
                 sections=["SKILLS", "EXPERIENCE", "PROJECTS"],
+                response_mode="list_candidates",
                 fallback_to_semantic=not candidates,
             )
 
@@ -137,11 +143,13 @@ def _resolve_lookup(
         candidate = lookup_service.find_candidate_by_name(candidate_name)
         return TargetedLookupOutput(
             candidate_ids=[] if candidate is None else [candidate.candidate_id],
+            candidate_names=[] if candidate is None else [candidate.full_name],
             sections=["PROFILE", "SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS"],
+            response_mode="profile",
             fallback_to_semantic=candidate is None,
         )
 
-    return TargetedLookupOutput(fallback_to_semantic=True)
+    return TargetedLookupOutput(response_mode="profile", fallback_to_semantic=True)
 
 
 def _extract_candidate_name_for_cv(user_query: str) -> str:
