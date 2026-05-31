@@ -54,6 +54,7 @@ class QdrantIndexClientProtocol(Protocol):
         """Upload points into a collection."""
         ...
 
+
 class QdrantQueryClientProtocol(Protocol):
     """Protocol for the subset of Qdrant client features the retriever needs."""
 

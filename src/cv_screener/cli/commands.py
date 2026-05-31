@@ -7,8 +7,8 @@ import typer
 
 from cv_screener.cli.dependencies import (
     build_cv_ingestion_service,
-    build_hybrid_retriever,
     build_pdf_rendering_service,
+    build_rag_query_service,
 )
 from cv_screener.cli.generation import generate_cv_content_files
 from cv_screener.cli.runtime import init_command
@@ -18,7 +18,6 @@ from cv_screener.cv_generation.content.generator import (
 )
 from cv_screener.cv_generation.pdf.templates import TemplateId
 from cv_screener.ingestion.schema import IngestionSummary
-from cv_screener.retrieval.schema import RetrievedChunk
 
 
 def register_commands(app: typer.Typer) -> None:
@@ -204,41 +203,10 @@ def query(
     ctx: typer.Context,
     query_text: Annotated[
         str,
-        typer.Argument(help="Search query to find matching CV chunks."),
+        typer.Argument(help="Recruiter-style question to answer from indexed CVs."),
     ],
-    top_k: Annotated[
-        int,
-        typer.Option("--top-k", "-k", help="Maximum number of results to show."),
-    ] = 5,
-    max_length: Annotated[
-        int,
-        typer.Option(
-            "--max-length",
-            "-m",
-            help="Truncate chunk text to this many characters for display.",
-        ),
-    ] = 200,
 ) -> None:
-    """Search indexed CV chunks with hybrid retrieval and print results."""
+    """Answer a recruiter-style question from indexed CV content."""
     init_command(ctx)
-    results = build_hybrid_retriever().retrieve(query_text)
-    if not results:
-        typer.echo("No matching CV chunks found.")
-        return
-    typer.echo(f"Top {min(top_k, len(results))} results for: {query_text}\n")
-    for chunk in results[:top_k]:
-        typer.echo(f"  [{chunk.rank}] (score: {chunk.score:.4f}) {_format_citation(chunk)}")
-        if chunk.candidate_name:
-            typer.echo(f"       Candidate: {chunk.candidate_name}")
-        suffix = "..." if len(chunk.text) > max_length else ""
-        typer.echo(f"       {chunk.text[:max_length]}{suffix}")
-        typer.echo()
-
-
-def _format_citation(chunk: RetrievedChunk) -> str:
-    citation_parts = [chunk.source_file]
-    if chunk.page:
-        citation_parts.append(f"p.{chunk.page}")
-    if chunk.section:
-        citation_parts.append(chunk.section)
-    return ", ".join(citation_parts)
+    result = build_rag_query_service().run(query_text)
+    typer.echo(result.final_text)

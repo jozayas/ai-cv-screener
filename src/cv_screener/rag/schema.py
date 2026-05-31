@@ -1,0 +1,102 @@
+"""Structured models for the RAG graph."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class RouteTarget(StrEnum):
+    """Supported high-level routes from the router node."""
+
+    SMALL_TALK = "small_talk"
+    CV_QUERY = "cv_query"
+    NEEDS_CLARIFICATION = "needs_clarification"
+
+
+class RouteDecision(BaseModel):
+    """Structured router output used to branch the RAG graph."""
+
+    route: RouteTarget
+    reasoning: str = Field(min_length=1)
+
+
+class SearchFacets(BaseModel):
+    """Lightweight structured filters extracted from a recruiter-style query."""
+
+    skills: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    roles: list[str] = Field(default_factory=list)
+    seniority: str | None = Field(default=None, min_length=1)
+    education: str | None = Field(default=None, min_length=1)
+
+
+class PlannerOutput(BaseModel):
+    """Structured query rewrite result for retrieval."""
+
+    primary_query: str = Field(min_length=1)
+    alternate_queries: list[str] = Field(default_factory=list, max_length=2)
+    facets: SearchFacets = Field(default_factory=SearchFacets)
+
+
+class AnswerCitation(BaseModel):
+    """Citation metadata carried into final answers."""
+
+    source_file: str = Field(min_length=1)
+    page: int = Field(ge=1)
+    section: str = Field(min_length=1)
+
+
+class AnswerOutput(BaseModel):
+    """Structured answer draft produced before final formatting."""
+
+    answer: str = Field(min_length=1)
+    citations: list[AnswerCitation] = Field(default_factory=list)
+    abstained: bool = Field(default=False)
+
+    @model_validator(mode="after")
+    def validate_answer_payload(self) -> AnswerOutput:
+        """Require citations for substantive answers and none for abstentions."""
+        if self.abstained:
+            if self.citations:
+                msg = "abstained answers must not include citations"
+                raise ValueError(msg)
+            return self
+        if not self.citations:
+            msg = "citations are required when abstained=False"
+            raise ValueError(msg)
+        return self
+
+
+class BriefAnswerOutput(BaseModel):
+    """Structured direct reply for non-retrieval turns."""
+
+    text: str = Field(min_length=1)
+
+
+class ReviewVerdict(StrEnum):
+    """Supported reviewer outcomes."""
+
+    APPROVE = "approve"
+    REVISE = "revise"
+    ABSTAIN = "abstain"
+
+
+class ReviewOutput(BaseModel):
+    """Structured groundedness review output."""
+
+    verdict: ReviewVerdict
+    reasoning: str = Field(min_length=1)
+    revised_answer: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_review_payload(self) -> ReviewOutput:
+        """Require a revised answer only for revise verdicts."""
+        if self.verdict is ReviewVerdict.REVISE and self.revised_answer is None:
+            msg = "revised_answer is required when verdict=revise"
+            raise ValueError(msg)
+        if self.verdict is not ReviewVerdict.REVISE and self.revised_answer is not None:
+            msg = "revised_answer is only allowed when verdict=revise"
+            raise ValueError(msg)
+        return self

@@ -22,7 +22,9 @@ if TYPE_CHECKING:
 
 
 class FakeEmbeddingModel:
-    def __init__(self, vectors: list[list[float]] | None = None, **_kwargs: object) -> None:
+    def __init__(
+        self, vectors: list[list[float]] | None = None, **_kwargs: object
+    ) -> None:
         self._vectors: list[list[float]] = vectors or [[0.1, 0.2, 0.3]]
         self.calls: list[list[str]] = []
 
@@ -58,9 +60,7 @@ class FakeQdrantClient:
         self.exists: bool = exists
         self.created: list[tuple[str, object, object]] = []
         self.deleted: list[str] = []
-        self.uploads: list[
-            tuple[str, list[PointStruct], int, int, int, bool]
-        ] = []
+        self.uploads: list[tuple[str, list[PointStruct], int, int, int, bool]] = []
 
     def collection_exists(self, collection_name: str) -> bool:
         del collection_name
@@ -241,9 +241,7 @@ def test_index_chunks_without_bm25_uses_unnamed_vectors() -> None:
     client = FakeQdrantClient(exists=False)
     embedding_model = FakeEmbeddingModel([[0.1, 0.2, 0.3]])
     indexer = QdrantChunkIndexer(
-        config=QdrantIndexConfig(
-            vector_size=3, enable_bm25=False
-        ),
+        config=QdrantIndexConfig(vector_size=3, enable_bm25=False),
         client=client,
         embedding_model=embedding_model,
     )

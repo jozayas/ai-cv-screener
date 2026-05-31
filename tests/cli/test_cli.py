@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 from cv_screener.cli import ColorMode, LogLevel, should_use_color, should_use_progress
 from cv_screener.cli.app import app as cli_app
 from cv_screener.ingestion.schema import IngestionSummary
+from cv_screener.rag.service import RAGQueryResult
 
 runner = CliRunner()
 cli_app_module = importlib.import_module("cv_screener.cli.app")
@@ -328,3 +329,41 @@ def test_ingest_command_orchestrates_pdf_ingestion(
         ("ingest", True, None),
     ]
     assert result.stdout == f"Ingested 2 PDFs into 5 chunks from {pdf_dir}.\n"
+
+
+def test_query_command_runs_rag_service_and_prints_grounded_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeRAGQueryService:
+        def run(self, query_text: str) -> RAGQueryResult:
+            calls.append(query_text)
+            return RAGQueryResult(
+                final_text=(
+                    "Ada Lovelace has Python backend experience.\n\n"
+                    "Sources:\n"
+                    "- ada-lovelace.pdf (page 2, Experience)"
+                ),
+                state={"final_text": "unused"},
+            )
+
+    monkeypatch.setattr(cli_commands, "build_rag_query_service", FakeRAGQueryService)
+
+    result = runner.invoke(
+        cli_app,
+        [
+            "--color",
+            "never",
+            "query",
+            "Who has Python backend experience?",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == ["Who has Python backend experience?"]
+    assert result.stdout == (
+        "Ada Lovelace has Python backend experience.\n\n"
+        "Sources:\n"
+        "- ada-lovelace.pdf (page 2, Experience)\n"
+    )

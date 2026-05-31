@@ -1,0 +1,71 @@
+"""Router helpers and LangGraph node for the RAG workflow."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from cv_screener.rag.llm import build_structured_output_model, invoke_structured_output
+from cv_screener.rag.prompts import ROUTER_SYSTEM_PROMPT
+from cv_screener.rag.schema import RouteDecision, RouteTarget
+
+if TYPE_CHECKING:
+    from langchain_core.language_models import LanguageModelInput
+    from langchain_core.runnables import Runnable, RunnableConfig
+
+    from cv_screener.config import RAGModelSettings
+    from cv_screener.rag.state import RAGState
+
+
+def build_router_model(
+    settings: RAGModelSettings | None = None,
+) -> Runnable[LanguageModelInput, RouteDecision]:
+    """Build the structured router model for OpenAI-compatible chat backends."""
+    return build_structured_output_model(RouteDecision, settings=settings)
+
+
+def route_query(
+    user_query: str,
+    *,
+    model: Runnable[LanguageModelInput, RouteDecision],
+    config: RunnableConfig | None = None,
+) -> RouteDecision:
+    """Classify a user query using structured output."""
+    return invoke_structured_output(
+        _build_messages(user_query),
+        model=model,
+        schema=RouteDecision,
+        label="router",
+        config=config,
+    )
+
+
+def router_node(
+    state: RAGState,
+    config: RunnableConfig | None = None,
+    *,
+    model: Runnable[LanguageModelInput, RouteDecision],
+) -> dict[str, RouteDecision]:
+    """LangGraph router node that returns a state update."""
+    user_query = state.get("user_query")
+    if not isinstance(user_query, str) or not user_query.strip():
+        msg = "router state must include a non-empty user_query"
+        raise ValueError(msg)
+    return {"route": route_query(user_query, model=model, config=config)}
+
+
+def next_node_for_route(
+    decision: RouteDecision,
+) -> Literal["planner", "brief_answer"]:
+    """Map a router decision to the next graph node name."""
+    if decision.route is RouteTarget.CV_QUERY:
+        return "planner"
+    return "brief_answer"
+
+
+def _build_messages(user_query: str) -> list[SystemMessage | HumanMessage]:
+    return [
+        SystemMessage(content=ROUTER_SYSTEM_PROMPT),
+        HumanMessage(content=user_query),
+    ]

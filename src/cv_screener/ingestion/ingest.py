@@ -1,4 +1,5 @@
 """Orchestration for parsing, chunking, and indexing rendered CV PDFs."""
+
 from pathlib import Path
 from typing import Protocol
 
