@@ -79,6 +79,9 @@ class SectionClassifier:
         if not cleaned:
             return _HEADER_SECTION
 
+        if cleaned in self._config.canonical_sections:
+            return cleaned
+
         _configure_hf_noise()
         with (
             contextlib.redirect_stdout(io.StringIO()),

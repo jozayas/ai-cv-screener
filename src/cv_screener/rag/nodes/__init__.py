@@ -7,9 +7,11 @@ from cv_screener.rag.nodes.rerank import LocalReranker, RerankerProtocol
 from cv_screener.rag.nodes.retrieve import RetrieverProtocol
 from cv_screener.rag.nodes.review import build_reviewer_model
 from cv_screener.rag.nodes.route import build_router_model
+from cv_screener.rag.nodes.targeted_lookup import LookupServiceProtocol
 
 __all__ = [
     "LocalReranker",
+    "LookupServiceProtocol",
     "RerankerProtocol",
     "RetrieverProtocol",
     "build_answer_model",

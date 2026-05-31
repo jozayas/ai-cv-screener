@@ -74,7 +74,7 @@ def parse_directory(
         logger.warning("No PDF files found in directory", path=str(directory))
         return []
 
-    logger.debug("Parsing PDF directory", path=str(directory), count=len(pdf_files))
+    logger.info("Parsing PDF directory", path=str(directory), count=len(pdf_files))
     workers = min(8, len(pdf_files))
     parsed_by_index: list[ParsedCV | None] = [None] * len(pdf_files)
     completed = 0
@@ -90,5 +90,5 @@ def parse_directory(
             if progress_callback is not None:
                 progress_callback(completed, len(pdf_files))
     results = [parsed for parsed in parsed_by_index if parsed is not None]
-    logger.debug("Parsed PDFs", total=len(pdf_files), successful=len(results))
+    logger.info("Parsed PDFs", total=len(pdf_files), successful=len(results))
     return results

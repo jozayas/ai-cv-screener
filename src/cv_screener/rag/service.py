@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from cv_screener.config import SQLiteSettings
+from cv_screener.persistence import SQLiteLookupService
 from cv_screener.rag.graph import CompiledRAGGraph, GraphDependencies, build_rag_graph
 from cv_screener.rag.nodes import (
     LocalReranker,
@@ -45,6 +48,9 @@ class RAGQueryService:
             router_model=build_router_model(),
             planner_model=build_planner_model(),
             brief_answer_model=build_brief_answer_model(),
+            lookup_service=SQLiteLookupService(
+                sqlite_path=Path(SQLiteSettings().sqlite_path),
+            ),
             retriever=HybridRetriever(),
             reranker=LocalReranker(),
             answer_model=build_answer_model(),

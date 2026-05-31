@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import chainlit as cl
+from anyio import Path
 from chainlit.config import config
 
 from cv_screener.chainlit.ui import EMPTY_QUERY_MESSAGE, RUNTIME_ERROR_MESSAGE
@@ -90,9 +91,27 @@ async def on_message(message: cl.Message) -> None:
                 await step.remove()
                 final_text = state_update.get("final_text", "")
                 if final_text:
-                    for token in final_text.split(" "):
-                        await msg.stream_token(token + " ")
-                    await msg.update()
+                    full_cv = state_update.get("full_cv")
+                    if full_cv is not None:
+                        pdf_path = Path(full_cv.pdf_path)
+                        pdf_bytes = await pdf_path.read_bytes()
+                        pdf = cl.Pdf(
+                            content=pdf_bytes,
+                            name=full_cv.source_file,
+                            display="side",
+                        )
+                        file_attachment = cl.File(
+                            content=pdf_bytes,
+                            name=full_cv.source_file,
+                            display="side",
+                        )
+                        msg.content = final_text
+                        msg.elements = [pdf, file_attachment]
+                        await msg.update()
+                    else:
+                        for token in final_text.split(" "):
+                            await msg.stream_token(token + " ")
+                        await msg.update()
             else:
                 step.streaming = False
                 await step.update()

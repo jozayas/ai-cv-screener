@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import pathlib
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import Connection, Engine, create_engine, delete, insert, select
+from sqlalchemy import Connection, Engine, create_engine, delete, insert, select, update
 
 from cv_screener.cv_generation.content.yaml_io import load_cv_profile
 from cv_screener.ingestion.indexing.points import (
@@ -91,6 +92,8 @@ class SQLiteCanonicalRepository:
         """Create canonical tables and indexes if missing."""
         self._sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         metadata.create_all(self._engine)
+        self._ensure_document_markdown_column()
+        self._backfill_document_markdown()
 
     def reset_all(self) -> None:
         """Clear canonical tables while preserving schema."""
@@ -175,6 +178,58 @@ class SQLiteCanonicalRepository:
         for chunk in chunks_to_store:
             grouped.setdefault(chunk.source_file, []).append(chunk)
         return grouped
+
+    def _ensure_document_markdown_column(self) -> None:
+        """Add the parsed markdown column to legacy databases if needed."""
+        with self._engine.begin() as conn:
+            columns = {
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(documents)").all()
+            }
+            if "parsed_markdown" not in columns:
+                _ = conn.exec_driver_sql(
+                    "ALTER TABLE documents ADD COLUMN parsed_markdown TEXT"
+                )
+
+    def _backfill_document_markdown(self) -> None:
+        """Populate missing parsed markdown from stored chunks when possible."""
+        with self._engine.begin() as conn:
+            document_rows = conn.execute(
+                select(documents.c.document_id, documents.c.parsed_markdown)
+            ).all()
+            missing_document_ids = [
+                row.document_id
+                for row in document_rows
+                if not isinstance(row.parsed_markdown, str) or not row.parsed_markdown
+            ]
+            if not missing_document_ids:
+                return
+
+            chunk_rows = conn.execute(
+                select(
+                    chunks.c.document_id,
+                    chunks.c.page_start,
+                    chunks.c.chunk_index,
+                    chunks.c.text,
+                )
+                .where(chunks.c.document_id.in_(missing_document_ids))
+                .order_by(
+                    chunks.c.document_id, chunks.c.page_start, chunks.c.chunk_index
+                )
+            ).all()
+            grouped_chunks: dict[str, list[str]] = defaultdict(list)
+            for row in chunk_rows:
+                grouped_chunks[row.document_id].append(row.text)
+
+            for document_id in missing_document_ids:
+                markdown = "\n\n".join(grouped_chunks.get(document_id, []))
+                if not markdown:
+                    continue
+                _ = conn.execute(
+                    update(documents)
+                    .where(documents.c.document_id == document_id)
+                    .values(parsed_markdown=markdown)
+                )
 
     @staticmethod
     def _match_profile(
@@ -299,6 +354,7 @@ class SQLiteCanonicalRepository:
                 source_path=str(cv.source_path),
                 document_title=cv.title.strip(),
                 pdf_path=str(cv.source_path),
+                parsed_markdown=cv.full_text,
                 yaml_path=str(yaml_path) if yaml_path is not None else None,
             )
         )

@@ -16,6 +16,12 @@ from cv_screener.rag.nodes.rerank import RerankerProtocol, reranker_node
 from cv_screener.rag.nodes.retrieve import retrieve_node as retrieve_state_node
 from cv_screener.rag.nodes.review import reviewer_node
 from cv_screener.rag.nodes.route import next_node_for_route, router_node
+from cv_screener.rag.nodes.targeted_lookup import (
+    LookupServiceProtocol,
+    hydrate_chunks_node,
+    return_cv_node,
+    targeted_lookup_node,
+)
 from cv_screener.rag.schema import (
     AnswerOutput,
     BriefAnswerOutput,
@@ -23,6 +29,7 @@ from cv_screener.rag.schema import (
     ReviewOutput,
     ReviewVerdict,
     RouteDecision,
+    TargetedLookupOutput,
 )
 from cv_screener.rag.state import RAGState
 
@@ -62,6 +69,7 @@ class GraphDependencies:
     router_model: Runnable[LanguageModelInput, RouteDecision]
     planner_model: Runnable[LanguageModelInput, PlannerOutput]
     brief_answer_model: Runnable[LanguageModelInput, BriefAnswerOutput]
+    lookup_service: LookupServiceProtocol
     retriever: RetrieverProtocol
     reranker: RerankerProtocol
     answer_model: Runnable[LanguageModelInput, AnswerOutput]
@@ -74,7 +82,10 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_node("router", router_graph_node)
     _ = graph.add_node("brief_answer", brief_answer_graph_node)
     _ = graph.add_node("planner", planner_graph_node)
+    _ = graph.add_node("targeted_lookup", targeted_lookup_graph_node)
+    _ = graph.add_node("return_cv", return_cv_graph_node)
     _ = graph.add_node("retrieve", retrieve_graph_node)
+    _ = graph.add_node("hydrate", hydrate_graph_node)
     _ = graph.add_node("rerank", rerank_graph_node)
     _ = graph.add_node("answer", answer_graph_node)
     _ = graph.add_node("review", review_graph_node)
@@ -83,6 +94,9 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_edge(START, "router")
     _ = graph.add_conditional_edges("router", _next_node_from_state)
     _ = graph.add_edge("brief_answer", "finalize")
+    _ = graph.add_edge("return_cv", "finalize")
+    _ = graph.add_conditional_edges("targeted_lookup", _next_node_after_targeted_lookup)
+    _ = graph.add_edge("hydrate", "rerank")
     _ = graph.add_edge("planner", "retrieve")
     _ = graph.add_edge("retrieve", "rerank")
     _ = graph.add_edge("rerank", "answer")
@@ -160,6 +174,50 @@ def retrieve_graph_node(
     )
 
 
+def targeted_lookup_graph_node(
+    state: RAGState,
+    runtime: Runtime[GraphDependencies],
+) -> dict[str, object]:
+    """Graph adapter for the targeted-lookup node."""
+    return cast(
+        "dict[str, object]",
+        {
+            **targeted_lookup_node(
+                state, lookup_service=runtime.context.lookup_service
+            ),
+            "nodes_executed": _executed(state, "targeted_lookup"),
+        },
+    )
+
+
+def return_cv_graph_node(
+    state: RAGState,
+    runtime: Runtime[GraphDependencies],
+) -> dict[str, object]:
+    """Graph adapter for the return-cv node."""
+    return cast(
+        "dict[str, object]",
+        {
+            **return_cv_node(state, lookup_service=runtime.context.lookup_service),
+            "nodes_executed": _executed(state, "return_cv"),
+        },
+    )
+
+
+def hydrate_graph_node(
+    state: RAGState,
+    runtime: Runtime[GraphDependencies],
+) -> dict[str, object]:
+    """Graph adapter for the hydrate-chunks node."""
+    return cast(
+        "dict[str, object]",
+        {
+            **hydrate_chunks_node(state, lookup_service=runtime.context.lookup_service),
+            "nodes_executed": _executed(state, "hydrate"),
+        },
+    )
+
+
 def rerank_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
@@ -202,12 +260,24 @@ def review_graph_node(
     return result
 
 
-def _next_node_from_state(state: RAGState) -> Literal["brief_answer", "planner"]:
+def _next_node_from_state(
+    state: RAGState,
+) -> Literal["brief_answer", "planner", "targeted_lookup", "return_cv"]:
     route = state.get("route")
     if not isinstance(route, RouteDecision):
         msg = "router state must include a route decision"
         raise TypeError(msg)
     return next_node_for_route(route)
+
+
+def _next_node_after_targeted_lookup(state: RAGState) -> Literal["hydrate", "planner"]:
+    lookup = state.get("targeted_lookup")
+    if not isinstance(lookup, TargetedLookupOutput):
+        msg = "targeted lookup state must include targeted_lookup output"
+        raise TypeError(msg)
+    if lookup.fallback_to_semantic:
+        return "planner"
+    return "hydrate"
 
 
 def _next_node_after_review(state: RAGState) -> Literal["review", "finalize"]:

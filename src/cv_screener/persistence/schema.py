@@ -31,6 +31,7 @@ documents = Table(
     Column("source_path", Text, nullable=False),
     Column("document_title", Text, nullable=False),
     Column("pdf_path", Text, nullable=False),
+    Column("parsed_markdown", Text, nullable=True),
     Column("yaml_path", Text, nullable=True),
 )
 

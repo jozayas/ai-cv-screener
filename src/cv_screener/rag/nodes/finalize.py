@@ -8,6 +8,7 @@ from cv_screener.rag.schema import (
     AnswerCitation,
     AnswerOutput,
     BriefAnswerOutput,
+    FullCVOutput,
     RouteDecision,
     RouteTarget,
 )
@@ -27,7 +28,23 @@ def finalize_node(state: RAGState) -> dict[str, object]:
         "nodes_executed": [*state.get("nodes_executed", []), "finalize"]
     }
 
-    if route.route is not RouteTarget.CV_QUERY:
+    if route.route is RouteTarget.FULL_CV:
+        full_cv = state.get("full_cv")
+        if isinstance(full_cv, FullCVOutput):
+            markdown = full_cv.parsed_markdown.strip()
+            text_parts = [
+                f"{full_cv.candidate_name} - {full_cv.source_file}",
+                markdown,
+                f"PDF: {full_cv.pdf_path}",
+            ]
+            result["final_text"] = "\n\n".join(part for part in text_parts if part)
+            result["full_cv"] = full_cv
+        return result
+
+    if (
+        route.route is not RouteTarget.CV_QUERY
+        and route.route is not RouteTarget.TARGETED_LOOKUP
+    ):
         brief_answer = state.get("brief_answer")
         if isinstance(brief_answer, BriefAnswerOutput):
             result["final_text"] = brief_answer.text

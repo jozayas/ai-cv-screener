@@ -4,6 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from loguru import logger
+
 from cv_screener.ingestion.chunking import chunk_cvs
 from cv_screener.ingestion.chunking.schema import Chunk
 from cv_screener.ingestion.indexing import QdrantChunkIndexer
@@ -85,6 +87,7 @@ class CVIngestionService:
         """Run the current ingestion slice from rendered PDFs through Qdrant."""
         total_steps = self._resolve_total_steps(expected_pdf_count)
         current_step = 0
+        logger.info("Ingesting CVs", pdf_dir=str(self.pdf_dir), reset=reset)
         self._emit_progress(
             progress_callback, current_step, total_steps, "Parsing PDFs"
         )
@@ -102,6 +105,10 @@ class CVIngestionService:
         self._emit_progress(
             progress_callback, current_step, total_steps, "Chunking content"
         )
+        logger.info(
+            "Chunking content",
+            pdf_count=len(parsed_cvs),
+        )
         chunks = self._chunker(parsed_cvs)
         current_step += 1
         self._emit_progress(
@@ -115,9 +122,19 @@ class CVIngestionService:
         self._emit_progress(
             progress_callback, current_step, total_steps, "Indexing Qdrant"
         )
+        logger.info(
+            "Indexing chunks into Qdrant",
+            chunk_count=len(chunks),
+            reset=reset,
+        )
         self._indexer.index_chunks(chunks, reset=reset)
         current_step += 1
         self._emit_progress(progress_callback, current_step, total_steps, "Finalizing")
+        logger.info(
+            "Ingestion complete",
+            pdf_count=len(parsed_cvs),
+            chunk_count=len(chunks),
+        )
         return IngestionSummary(
             pdf_count=len(parsed_cvs),
             chunk_count=len(chunks),

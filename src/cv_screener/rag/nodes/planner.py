@@ -54,8 +54,11 @@ def planner_node(
         raise ValueError(msg)
 
     route = state.get("route")
-    if not isinstance(route, RouteDecision) or route.route is not RouteTarget.CV_QUERY:
-        msg = "planner state must include route=cv_query"
+    if not isinstance(route, RouteDecision) or route.route not in {
+        RouteTarget.CV_QUERY,
+        RouteTarget.TARGETED_LOOKUP,
+    }:
+        msg = "planner state must include route=cv_query or route=targeted_lookup"
         raise ValueError(msg)
 
     return {"planner": plan_query(user_query, model=model, config=config)}

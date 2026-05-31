@@ -106,8 +106,13 @@ def reranker_node(
 ) -> dict[str, list[RetrievedChunk]]:
     """LangGraph reranker node over retrieved chunks."""
     planner = state.get("planner")
-    if not isinstance(planner, PlannerOutput):
-        msg = "reranker state must include planner output"
+    query_text = planner.primary_query if isinstance(planner, PlannerOutput) else None
+    if query_text is None:
+        user_query = state.get("user_query")
+        if isinstance(user_query, str) and user_query.strip():
+            query_text = user_query
+    if query_text is None:
+        msg = "reranker state must include planner output or user_query"
         raise TypeError(msg)
 
     chunks = state.get("retrieved_chunks")
@@ -117,7 +122,7 @@ def reranker_node(
 
     return {
         "reranked_chunks": reranker.rerank(
-            planner.primary_query,
+            query_text,
             chunks,
             top_k=top_k,
         )

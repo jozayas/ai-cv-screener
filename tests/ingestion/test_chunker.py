@@ -154,6 +154,31 @@ def test_chunk_cv_bold_and_plain_headings() -> None:
     assert "EXPERIENCE" in sections
 
 
+def test_chunk_cv_uses_classifier_output_as_canonical_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_classifier = chunker.SectionClassifier
+
+    class CanonicalizingSectionClassifier(original_classifier):
+        def classify(self, raw_section: str) -> str:
+            if "professional experience" in raw_section.casefold():
+                return "EXPERIENCE"
+            return super().classify(raw_section)
+
+    monkeypatch.setattr(
+        chunker,
+        "SectionClassifier",
+        CanonicalizingSectionClassifier,
+    )
+
+    cv = _make_cv("## Professional Experience\n\nBuilt APIs.")
+
+    chunks = chunker.chunk_cv(cv)
+
+    assert len(chunks) == 1
+    assert chunks[0].section == "EXPERIENCE"
+
+
 def test_chunk_cvs_processes_multiple() -> None:
     cv1 = _make_cv("## **SUMMARY**\n\nEngineer one.", "engineer-one")
     cv2 = _make_cv("## **SUMMARY**\n\nEngineer two.", "engineer-two")

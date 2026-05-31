@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -77,7 +77,7 @@ class CVGenerationService:
         progress_callback: ProgressCallback | None = None,
     ) -> list[Path]:
         """Generate a fixed number of validated CV content files."""
-        logger.debug(
+        logger.info(
             "Generating CV content files",
             count=count,
             output_dir=str(self.output_dir),
@@ -85,11 +85,18 @@ class CVGenerationService:
         )
         worker_count = self._resolve_worker_count(count)
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            written_files = list(executor.map(self._generate_one, range(count)))
-        if progress_callback is not None:
-            for candidate_number in range(1, count + 1):
-                progress_callback(candidate_number, count)
-        logger.debug(
+            future_to_index = {
+                executor.submit(self._generate_one, idx): idx + 1
+                for idx in range(count)
+            }
+            written_by_index: dict[int, Path] = {}
+            for future in as_completed(future_to_index):
+                candidate_number = future_to_index[future]
+                written_by_index[candidate_number] = future.result()
+                if progress_callback is not None:
+                    progress_callback(candidate_number, count)
+        written_files = [written_by_index[i] for i in range(1, count + 1)]
+        logger.info(
             "Generated CV content files",
             count=len(written_files),
             output_dir=str(self.output_dir),

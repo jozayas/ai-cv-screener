@@ -12,6 +12,8 @@ class RouteTarget(StrEnum):
 
     SMALL_TALK = "small_talk"
     CV_QUERY = "cv_query"
+    TARGETED_LOOKUP = "targeted_lookup"
+    FULL_CV = "full_cv"
     NEEDS_CLARIFICATION = "needs_clarification"
 
 
@@ -106,6 +108,24 @@ class BriefAnswerOutput(BaseModel):
     """Structured direct reply for non-retrieval turns."""
 
     text: str = Field(min_length=1)
+
+
+class TargetedLookupOutput(BaseModel):
+    """Deterministic SQLite lookup result used before hydration."""
+
+    candidate_ids: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
+    fallback_to_semantic: bool = Field(default=False)
+
+
+class FullCVOutput(BaseModel):
+    """Resolved CV document metadata for direct-return requests."""
+
+    candidate_name: str = Field(min_length=1)
+    source_file: str = Field(min_length=1)
+    document_title: str = Field(min_length=1)
+    pdf_path: str = Field(min_length=1)
+    parsed_markdown: str = Field(min_length=1)
 
 
 class ReviewVerdict(StrEnum):

@@ -4,16 +4,19 @@ from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
 
+from cv_screener.persistence.lookup import CandidateMatch, DocumentMatch
 from cv_screener.rag.graph import GraphDependencies, build_rag_graph
 from cv_screener.rag.schema import (
     AnswerCitation,
     AnswerOutput,
     BriefAnswerOutput,
+    FullCVOutput,
     PlannerOutput,
     ReviewOutput,
     ReviewVerdict,
     RouteDecision,
     RouteTarget,
+    TargetedLookupOutput,
 )
 from cv_screener.retrieval.schema import RetrievedChunk
 
@@ -42,6 +45,56 @@ class FakeReranker:
     ) -> list[RetrievedChunk]:
         self.calls.append((query_text, chunks, top_k))
         return self.response
+
+
+class FakeLookupCandidate(CandidateMatch):
+    pass
+
+
+class FakeLookupDocument(DocumentMatch):
+    pass
+
+
+class FakeLookupService:
+    def __init__(
+        self,
+        *,
+        candidate_by_name: CandidateMatch | None = None,
+        candidates_by_skill: list[CandidateMatch] | None = None,
+        candidates_by_education: list[CandidateMatch] | None = None,
+        document_by_name: DocumentMatch | None = None,
+        hydrated_chunks: list[RetrievedChunk] | None = None,
+    ) -> None:
+        self._candidate_by_name = candidate_by_name
+        self._candidates_by_skill = candidates_by_skill or []
+        self._candidates_by_education = candidates_by_education or []
+        self._document_by_name = document_by_name
+        self._hydrated_chunks = hydrated_chunks or []
+
+    def find_candidate_by_name(self, name: str) -> CandidateMatch | None:
+        _ = name
+        return self._candidate_by_name
+
+    def find_candidates_by_skill(self, skill_name: str) -> list[CandidateMatch]:
+        _ = skill_name
+        return self._candidates_by_skill
+
+    def find_candidates_by_education(self, institution: str) -> list[CandidateMatch]:
+        _ = institution
+        return self._candidates_by_education
+
+    def find_document_by_candidate_name(self, name: str) -> DocumentMatch | None:
+        _ = name
+        return self._document_by_name
+
+    def fetch_chunks(
+        self,
+        *,
+        candidate_ids: list[str],
+        sections: list[str] | None = None,
+    ) -> list[RetrievedChunk]:
+        _ = (candidate_ids, sections)
+        return self._hydrated_chunks
 
 
 def make_runnable[T](response: T) -> Runnable[LanguageModelInput, T]:
@@ -86,6 +139,7 @@ def test_graph_bypasses_planner_and_retrieval_for_small_talk() -> None:
         brief_answer_model=make_runnable(
             BriefAnswerOutput(text="Hi. Ask me about the CVs when you're ready.")
         ),
+        lookup_service=FakeLookupService(),
         retriever=retriever,
         reranker=reranker,
         answer_model=make_runnable(
@@ -161,6 +215,7 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
             )
         ),
         brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(),
         retriever=retriever,
         reranker=reranker,
         answer_model=make_runnable(
@@ -271,6 +326,7 @@ def test_graph_retries_review_once_after_revise_verdict() -> None:
         ),
         planner_model=make_runnable(PlannerOutput(primary_query="python api engineer")),
         brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(),
         retriever=retriever,
         reranker=reranker,
         answer_model=make_runnable(
@@ -332,6 +388,134 @@ def test_graph_retries_review_once_after_revise_verdict() -> None:
         "rerank",
         "answer",
         "review",
+        "review",
+        "finalize",
+    ]
+
+
+def test_graph_routes_full_cv_queries_to_return_cv() -> None:
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(route=RouteTarget.FULL_CV, reasoning="Direct CV request.")
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="unused")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(
+            document_by_name=FakeLookupDocument(
+                candidate_id="cand-1",
+                full_name="José Luis Zayas Alcaide",
+                source_file="jose-luis-zayas-alcaide.pdf",
+                document_title="José Luis Zayas Alcaide CV",
+                pdf_path="/tmp/jose-luis-zayas-alcaide.pdf",  # noqa: S108
+                parsed_markdown="## **SUMMARY**\n\nAI engineer.",
+            )
+        ),
+        retriever=FakeRetriever([]),
+        reranker=FakeReranker([]),
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="unused",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        source_file="ignored.pdf",
+                        page=1,
+                        section="Summary",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke(
+        {"user_query": "Give me the CV of Jose Luis"}, context=dependencies
+    )
+
+    assert result.get("full_cv") == FullCVOutput(
+        candidate_name="José Luis Zayas Alcaide",
+        source_file="jose-luis-zayas-alcaide.pdf",
+        document_title="José Luis Zayas Alcaide CV",
+        pdf_path="/tmp/jose-luis-zayas-alcaide.pdf",  # noqa: S108
+        parsed_markdown="## **SUMMARY**\n\nAI engineer.",
+    )
+    assert (
+        result.get("final_text")
+        == "José Luis Zayas Alcaide - jose-luis-zayas-alcaide.pdf\n\n"
+        "## **SUMMARY**\n\nAI engineer.\n\n"
+        "PDF: /tmp/jose-luis-zayas-alcaide.pdf"
+    )
+    assert result.get("nodes_executed") == ["router", "return_cv", "finalize"]
+
+
+def test_graph_routes_targeted_lookup_queries_through_hydrate() -> None:
+    hydrated = [
+        RetrievedChunk(
+            candidate_name="Jane Doe",
+            source_file="jane-doe.pdf",
+            document_title="Jane Doe CV",
+            page=1,
+            section="SUMMARY",
+            text="Backend engineer.",
+            score=1.0,
+            rank=1,
+        )
+    ]
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="Deterministic profile lookup.",
+            )
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="unused")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(
+            candidate_by_name=FakeLookupCandidate("cand-1", "Jane Doe"),
+            hydrated_chunks=hydrated,
+        ),
+        retriever=FakeRetriever([]),
+        reranker=FakeReranker(hydrated),
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="Jane Doe is a backend engineer.",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        candidate_name="Jane Doe",
+                        source_file="jane-doe.pdf",
+                        page=1,
+                        section="SUMMARY",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(
+                verdict=ReviewVerdict.APPROVE,
+                reasoning="The summary chunk supports the answer.",
+            )
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke({"user_query": "Summarize Jane Doe"}, context=dependencies)
+
+    assert result.get("targeted_lookup") == TargetedLookupOutput(
+        candidate_ids=["cand-1"],
+        sections=["PROFILE", "SUMMARY", "EXPERIENCE", "EDUCATION", "SKILLS"],
+        fallback_to_semantic=False,
+    )
+    assert result.get("retrieved_chunks") == hydrated
+    assert result.get("nodes_executed") == [
+        "router",
+        "targeted_lookup",
+        "hydrate",
+        "rerank",
+        "answer",
         "review",
         "finalize",
     ]

@@ -32,6 +32,7 @@ dependencies = [
     "sentence-transformers>=5.5.1",
     "typer>=0.26.4",
     "weasyprint>=68.1",
+    "anyio>=4.13.0",
 ]
 
 [project.scripts]
