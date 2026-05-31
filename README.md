@@ -152,10 +152,10 @@ uv run pre-commit install
 Start local infrastructure:
 
 ```bash
-docker compose up -d ollama
+docker compose up -d qdrant ollama
 ```
 
-The compose file pins the Ollama image version for reproducible local setup.
+The compose file pins both Qdrant and Ollama image versions for reproducible local setup.
 
 Pull the generation model into Ollama:
 

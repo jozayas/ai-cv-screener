@@ -78,5 +78,7 @@ class OpenAICVProfileSource:
                     error_type=type(error).__name__,
                     error_message=last_error,
                 )
-        message = f"model failed to produce a valid CV draft after retries: {last_error}"
+        message = (
+            f"model failed to produce a valid CV draft after retries: {last_error}"
+        )
         raise ValueError(message)

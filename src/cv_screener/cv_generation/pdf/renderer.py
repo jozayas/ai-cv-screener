@@ -33,7 +33,9 @@ class CVPDFRenderer:
             "template_name": definition.template_name,
             "template_id": definition.template_id,
             "section_order_preset": preset.preset_id,
-            "main_sections": [sections[section_id] for section_id in preset.main_sections],
+            "main_sections": [
+                sections[section_id] for section_id in preset.main_sections
+            ],
             "sidebar_sections": [
                 sections[section_id] for section_id in preset.sidebar_sections
             ],

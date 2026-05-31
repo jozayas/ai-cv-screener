@@ -18,3 +18,16 @@ class GenerationSettings(BaseSettings):
     generation_model: str = Field(default="gemma3:12b")
     generation_temperature: float = Field(default=0.8, ge=0, le=2)
     generation_max_retries: int = Field(default=2, ge=0, le=5)
+
+
+class QdrantSettings(BaseSettings):
+    """Settings for the local Qdrant vector store."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    qdrant_url: str = Field(default="http://localhost:6333")
+    qdrant_check_compatibility: bool = Field(default=False)

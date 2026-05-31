@@ -17,9 +17,11 @@ from cv_screener.cv_generation.content.generator import (
     GenerationMode,
 )
 from cv_screener.cv_generation.pdf.templates import TemplateId
+from cv_screener.ingestion import IngestionSummary
 
 if TYPE_CHECKING:
     from cv_screener.cv_generation.pdf.renderer import PDFRenderingService
+    from cv_screener.ingestion import CVIngestionService
 
 app = typer.Typer(
     help="CV screener CLI.",
@@ -61,7 +63,9 @@ def generate_content(
     count: int = typer.Option(3, min=1, max=50, help="Number of YAML CVs to generate."),
     mode: Annotated[
         GenerationMode,
-        typer.Option(help="Generation mode: seeded local samples or LLM-backed generation."),
+        typer.Option(
+            help="Generation mode: seeded local samples or LLM-backed generation."
+        ),
     ] = GenerationMode.SEEDED,
     output_dir: Path = typer.Option(
         Path("data/cvs_contents"),
@@ -85,10 +89,14 @@ def generate_content(
 @app.command("generate-cvs")
 def generate_cvs(  # noqa: PLR0913
     ctx: typer.Context,
-    count: int = typer.Option(3, min=1, max=50, help="Number of CVs to generate and render."),
+    count: int = typer.Option(
+        3, min=1, max=50, help="Number of CVs to generate and render."
+    ),
     mode: Annotated[
         GenerationMode,
-        typer.Option(help="Generation mode: seeded local samples or LLM-backed generation."),
+        typer.Option(
+            help="Generation mode: seeded local samples or LLM-backed generation."
+        ),
     ] = GenerationMode.SEEDED,
     content_dir: Path = typer.Option(
         Path("data/cvs_contents"),
@@ -106,7 +114,9 @@ def generate_cvs(  # noqa: PLR0913
     ),
     template_id: Annotated[
         TemplateId | None,
-        typer.Option(help="Optional PDF template to use instead of deterministic selection."),
+        typer.Option(
+            help="Optional PDF template to use instead of deterministic selection."
+        ),
     ] = None,
 ) -> None:
     """Generate validated CV content YAML files and render them into PDFs."""
@@ -174,7 +184,9 @@ def render(
     ),
     template_id: Annotated[
         TemplateId | None,
-        typer.Option(help="Optional PDF template to use instead of deterministic selection."),
+        typer.Option(
+            help="Optional PDF template to use instead of deterministic selection."
+        ),
     ] = None,
 ) -> None:
     """Render one YAML CV file or a directory of YAML CV files into PDFs."""
@@ -194,6 +206,32 @@ def render(
     typer.echo(f"Rendered {len(rendered_files)} {target} in {output_dir}.")
 
 
+@app.command("ingest")
+def ingest(
+    ctx: typer.Context,
+    *,
+    pdf_dir: Path = typer.Option(
+        Path("data/cv_pdfs"),
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        help="Directory of rendered CV PDFs to parse, chunk, and index.",
+    ),
+    reset: Annotated[
+        bool,
+        typer.Option("--reset", help="Recreate the Qdrant collection before indexing."),
+    ] = False,
+) -> IngestionSummary:
+    """Parse rendered CV PDFs, chunk them, and index the chunks into Qdrant."""
+    init_command(ctx)
+    summary = build_cv_ingestion_service(pdf_dir=pdf_dir).ingest(reset=reset)
+    typer.echo(
+        f"Ingested {summary.pdf_count} PDFs into {summary.chunk_count} chunks from {pdf_dir}."
+    )
+    return summary
+
+
 def build_pdf_rendering_service(
     *,
     input_dir: Path,
@@ -210,6 +248,13 @@ def build_pdf_rendering_service(
         output_dir=output_dir,
         template_id=template_id,
     )
+
+
+def build_cv_ingestion_service(*, pdf_dir: Path) -> "CVIngestionService":
+    """Build the ingestion service lazily to keep CLI import overhead low."""
+    from cv_screener.ingestion import CVIngestionService  # noqa: PLC0415
+
+    return CVIngestionService(pdf_dir=pdf_dir)
 
 
 def main() -> None:

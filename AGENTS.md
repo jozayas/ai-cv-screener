@@ -40,6 +40,10 @@ For each requested feature:
 
 Avoid unnecessary abstractions, agents, auth, background workers, Kubernetes, and custom frontend work unless explicitly requested.
 
+Before ignoring, suppressing, or weakening any lint rule or typing rule, ask the user what to do.
+
+Always use the `using-agent-skills` skill at the beginning of a session.
+
 ## Required Architecture
 
 ```txt
