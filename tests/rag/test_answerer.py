@@ -6,15 +6,15 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
-import cv_screener.rag.answerer as answerer_module
+import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.answerer import (
+from cv_screener.rag.schema import AnswerCitation, AnswerOutput
+from cv_screener.rag.nodes.answer import (
     ABSTAINED_ANSWER,
     answer_query,
     answerer_node,
     build_answer_model,
 )
-from cv_screener.rag.models import AnswerCitation, AnswerOutput
 from cv_screener.retrieval.schema import RetrievedChunk
 
 
@@ -158,7 +158,7 @@ def test_answerer_uses_function_calling_for_structured_output(
             )
             return runnable
 
-    monkeypatch.setattr(answerer_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     result = answer_query(
         "Who has Python experience?",
         [

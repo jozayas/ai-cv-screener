@@ -1,5 +1,5 @@
-from cv_screener.rag.models import PlannerOutput
-from cv_screener.rag.reranker import LocalReranker, reranker_node
+from cv_screener.rag.schema import PlannerOutput
+from cv_screener.rag.nodes.rerank import LocalReranker, reranker_node
 from cv_screener.retrieval.schema import RetrievedChunk
 
 

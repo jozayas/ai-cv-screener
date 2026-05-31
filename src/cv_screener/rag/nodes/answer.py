@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-from pydantic import ValidationError
 
-from cv_screener.config import RAGModelSettings
-from cv_screener.rag.models import AnswerOutput
+from cv_screener.rag.llm import build_structured_output_model, invoke_structured_output
 from cv_screener.rag.prompts import ANSWERER_SYSTEM_PROMPT
+from cv_screener.rag.schema import AnswerOutput
 
 if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable, RunnableConfig
 
+    from cv_screener.config import RAGModelSettings
     from cv_screener.rag.state import RAGState
     from cv_screener.retrieval.schema import RetrievedChunk
 
@@ -27,18 +26,7 @@ def build_answer_model(
     settings: RAGModelSettings | None = None,
 ) -> Runnable[LanguageModelInput, AnswerOutput]:
     """Build the structured answer model for OpenAI-compatible chat backends."""
-    resolved_settings = settings or RAGModelSettings()
-    llm = ChatOpenAI(
-        model=resolved_settings.rag_model,
-        base_url=resolved_settings.openai_base_url,
-        api_key=resolved_settings.openai_api_key,
-        temperature=resolved_settings.rag_temperature,
-        max_retries=resolved_settings.rag_max_retries,
-    )
-    return cast(
-        "Runnable[LanguageModelInput, AnswerOutput]",
-        llm.with_structured_output(AnswerOutput, method="function_calling"),
-    )
+    return build_structured_output_model(AnswerOutput, settings=settings)
 
 
 def answer_query(
@@ -52,12 +40,13 @@ def answer_query(
     if not chunks:
         return AnswerOutput(answer=ABSTAINED_ANSWER, abstained=True)
 
-    result = model.invoke(_build_messages(user_query, chunks), config=config)
-    try:
-        return AnswerOutput.model_validate(result)
-    except ValidationError as error:
-        msg = f"answerer returned invalid structured output: {error}"
-        raise ValueError(msg) from error
+    return invoke_structured_output(
+        _build_messages(user_query, chunks),
+        model=model,
+        schema=AnswerOutput,
+        label="answerer",
+        config=config,
+    )
 
 
 def answerer_node(

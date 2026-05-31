@@ -5,7 +5,7 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
 
 from cv_screener.rag.graph import GraphDependencies, build_rag_graph
-from cv_screener.rag.models import (
+from cv_screener.rag.schema import (
     AnswerCitation,
     AnswerOutput,
     BriefAnswerOutput,
@@ -96,9 +96,9 @@ def test_graph_bypasses_planner_and_retrieval_for_small_talk() -> None:
 
     result = graph.invoke({"user_query": "hello"}, context=dependencies)
 
-    assert result["final_text"] == "Hi. Ask me about the CVs when you're ready."
+    assert result.get("final_text") == "Hi. Ask me about the CVs when you're ready."
     assert "planner" not in result
-    assert result["brief_answer"] == BriefAnswerOutput(
+    assert result.get("brief_answer") == BriefAnswerOutput(
         text="Hi. Ask me about the CVs when you're ready."
     )
     assert "retrieved_chunks" not in result
@@ -176,11 +176,13 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
         context=dependencies,
     )
 
-    assert result["route"].route is RouteTarget.CV_QUERY
-    assert result["planner"].primary_query == "python backend engineer"
-    assert result["retrieved_chunks"] == retrieved_chunks
-    assert result["reranked_chunks"] == reranked_chunks
-    assert result["answer"] == AnswerOutput(
+    route = result.get("route")
+    planner = result.get("planner")
+    assert route is not None and route.route is RouteTarget.CV_QUERY
+    assert planner is not None and planner.primary_query == "python backend engineer"
+    assert result.get("retrieved_chunks") == retrieved_chunks
+    assert result.get("reranked_chunks") == reranked_chunks
+    assert result.get("answer") == AnswerOutput(
         answer="Ada Lovelace has Python backend experience.",
         citations=[
             AnswerCitation(
@@ -190,11 +192,11 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
             )
         ],
     )
-    assert result["review"] == ReviewOutput(
+    assert result.get("review") == ReviewOutput(
         verdict=ReviewVerdict.APPROVE,
         reasoning="The cited chunk supports the answer.",
     )
-    assert result["final_text"] == (
+    assert result.get("final_text") == (
         "Ada Lovelace has Python backend experience.\n\n"
         "Sources:\n"
         "- ada-lovelace.pdf (page 2, Experience)"

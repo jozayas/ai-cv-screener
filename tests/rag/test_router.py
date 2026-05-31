@@ -4,16 +4,17 @@ import pytest
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
+from pydantic import SecretStr
 
-import cv_screener.rag.router as router_module
+import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.models import RouteDecision, RouteTarget
-from cv_screener.rag.router import (
+from cv_screener.rag.nodes.route import (
     build_router_model,
     next_node_for_route,
     route_query,
     router_node,
 )
+from cv_screener.rag.schema import RouteDecision, RouteTarget
 
 
 def make_router_runnable(
@@ -118,13 +119,13 @@ def test_router_uses_function_calling_for_structured_output(
             )
             return runnable
 
-    monkeypatch.setattr(router_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     decision = route_query(
         "hello",
         model=build_router_model(
             RAGModelSettings(
                 openai_base_url="http://localhost:11434/v1",
-                openai_api_key="ollama",
+                openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",
             )
         ),

@@ -4,15 +4,16 @@ import pytest
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
+from pydantic import SecretStr
 
-import cv_screener.rag.brief_answer as brief_answer_module
+import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.brief_answer import (
+from cv_screener.rag.nodes.brief_answer import (
     answer_briefly,
     brief_answer_node,
     build_brief_answer_model,
 )
-from cv_screener.rag.models import BriefAnswerOutput, RouteDecision, RouteTarget
+from cv_screener.rag.schema import BriefAnswerOutput, RouteDecision, RouteTarget
 
 
 def make_brief_runnable(
@@ -78,14 +79,14 @@ def test_build_brief_answer_model_uses_function_calling(
             runnable, _ = make_brief_runnable(BriefAnswerOutput(text="Hi."))
             return runnable
 
-    monkeypatch.setattr(brief_answer_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     result = answer_briefly(
         "hello",
         RouteDecision(route=RouteTarget.SMALL_TALK, reasoning="Greeting."),
         model=build_brief_answer_model(
             RAGModelSettings(
                 openai_base_url="http://localhost:11434/v1",
-                openai_api_key="ollama",
+                openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",
             )
         ),

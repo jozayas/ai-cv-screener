@@ -6,16 +6,20 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
-import cv_screener.rag.reviewer as reviewer_module
+import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.answerer import ABSTAINED_ANSWER
-from cv_screener.rag.models import (
+from cv_screener.rag.schema import (
     AnswerCitation,
     AnswerOutput,
     ReviewOutput,
     ReviewVerdict,
 )
-from cv_screener.rag.reviewer import build_reviewer_model, review_answer, reviewer_node
+from cv_screener.rag.nodes.answer import ABSTAINED_ANSWER
+from cv_screener.rag.nodes.review import (
+    build_reviewer_model,
+    review_answer,
+    reviewer_node,
+)
 from cv_screener.retrieval.schema import RetrievedChunk
 
 
@@ -166,7 +170,7 @@ def test_reviewer_uses_function_calling_for_structured_output(
             )
             return runnable
 
-    monkeypatch.setattr(reviewer_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     result = review_answer(
         "Who has Python experience?",
         AnswerOutput(

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
-    from cv_screener.rag.models import (
+    from cv_screener.rag.schema import (
         AnswerOutput,
         BriefAnswerOutput,
         PlannerOutput,
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     )
     from cv_screener.retrieval.schema import RetrievedChunk
 else:
-    _rag_models = import_module("cv_screener.rag.models")
+    _rag_models = import_module("cv_screener.rag.schema")
     _retrieval_schema = import_module("cv_screener.retrieval.schema")
     AnswerOutput = _rag_models.AnswerOutput
     BriefAnswerOutput = _rag_models.BriefAnswerOutput

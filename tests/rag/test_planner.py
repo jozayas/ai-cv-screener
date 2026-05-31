@@ -6,15 +6,19 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
-import cv_screener.rag.planner as planner_module
+import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.models import (
+from cv_screener.rag.schema import (
     PlannerOutput,
     RouteDecision,
     RouteTarget,
     SearchFacets,
 )
-from cv_screener.rag.planner import build_planner_model, plan_query, planner_node
+from cv_screener.rag.nodes.planner import (
+    build_planner_model,
+    plan_query,
+    planner_node,
+)
 
 
 def make_planner_runnable(
@@ -29,7 +33,6 @@ def make_planner_runnable(
     return cast(
         "Runnable[LanguageModelInput, PlannerOutput]", RunnableLambda(invoke)
     ), invocations
-
 
 
 def test_planner_normalizes_recruiter_query_for_retrieval() -> None:
@@ -62,7 +65,6 @@ def test_planner_normalizes_recruiter_query_for_retrieval() -> None:
     assert len(invocations) == 1
 
 
-
 def test_planner_node_returns_state_update() -> None:
     model, _ = make_planner_runnable(
         PlannerOutput(
@@ -90,7 +92,6 @@ def test_planner_node_returns_state_update() -> None:
     }
 
 
-
 def test_planner_requires_primary_query() -> None:
     model, _ = make_planner_runnable(
         {
@@ -101,7 +102,6 @@ def test_planner_requires_primary_query() -> None:
 
     with pytest.raises(ValueError, match="primary_query"):
         plan_query("Who knows Python?", model=model)
-
 
 
 def test_planner_uses_function_calling_for_structured_output(
@@ -126,7 +126,7 @@ def test_planner_uses_function_calling_for_structured_output(
             )
             return runnable
 
-    monkeypatch.setattr(planner_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     result = plan_query(
         "Who has Python experience?",
         model=build_planner_model(

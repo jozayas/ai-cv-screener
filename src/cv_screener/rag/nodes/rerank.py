@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 from sentence_transformers import CrossEncoder
 
-from cv_screener.rag.models import PlannerOutput
+from cv_screener.rag.schema import PlannerOutput
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -125,4 +125,4 @@ def reranker_node(
 
 
 def _default_cross_encoder_factory(model_name: str) -> CrossEncoderProtocol:
-    return cast("CrossEncoderProtocol", CrossEncoder(model_name))
+    return cast("CrossEncoderProtocol", cast("object", CrossEncoder(model_name)))
