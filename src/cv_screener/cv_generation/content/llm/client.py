@@ -3,7 +3,11 @@
 from openai import OpenAI
 
 from cv_screener.config import GenerationSettings
-from cv_screener.cv_generation.content.llm.prompts import build_generation_messages
+from cv_screener.cv_generation.content.llm.prompts import (
+    CVLanguage,
+    CVTargetPages,
+    build_generation_messages,
+)
 
 
 class OpenAICVGenerationClient:
@@ -17,12 +21,22 @@ class OpenAICVGenerationClient:
             api_key=settings.openai_api_key.get_secret_value(),
         )
 
-    def request_draft(self, *, last_error: str | None = None) -> str:
+    def request_draft(
+        self,
+        *,
+        language: CVLanguage = "english",
+        target_pages: CVTargetPages = 1,
+        last_error: str | None = None,
+    ) -> str:
         """Request a single raw draft completion from the configured model."""
         completion = self.client.chat.completions.create(
             model=self.settings.generation_model,
             temperature=self.settings.generation_temperature,
-            messages=build_generation_messages(last_error=last_error),
+            messages=build_generation_messages(
+                language=language,
+                target_pages=target_pages,
+                last_error=last_error,
+            ),
         )
         content = completion.choices[0].message.content
         if not content:

@@ -1,19 +1,28 @@
 """Draft CV content sources for local and model-backed generation."""
 
+from __future__ import annotations
+
 import json
+import random
 from threading import Lock
 from time import monotonic, sleep
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 from pydantic import ValidationError
 
-from cv_screener.config import GenerationSettings
 from cv_screener.cv_generation.content.llm.client import OpenAICVGenerationClient
 from cv_screener.cv_generation.content.llm.parsing import parse_json_payload
 from cv_screener.cv_generation.content.schema import CVProfileDraft
 from cv_screener.cv_generation.content.seed_data import SEED_PROFILES
+
+if TYPE_CHECKING:
+    from cv_screener.config import GenerationSettings
+    from cv_screener.cv_generation.content.llm.prompts import (
+        CVLanguage,
+        CVTargetPages,
+    )
 
 
 class CVProfileSource(Protocol):
@@ -22,6 +31,7 @@ class CVProfileSource(Protocol):
     @property
     def max_concurrency(self) -> int:
         """Maximum safe parallelism for this source."""
+        ...
 
     def generate_draft(self, *, index: int) -> CVProfileDraft:
         """Generate a single draft CV payload."""
@@ -63,6 +73,8 @@ class OpenAICVProfileSource:
 
     def generate_draft(self, *, index: int) -> CVProfileDraft:
         """Generate a draft CV payload from the configured model."""
+        language: CVLanguage = random.choice(["english", "spanish", "french"])  # noqa: S311
+        target_pages: CVTargetPages = random.choice([1, 2, 3])  # noqa: S311
         last_error: str | None = None
         for attempt in range(self.settings.generation_max_retries + 1):
             logger.debug(
@@ -76,7 +88,11 @@ class OpenAICVProfileSource:
             content: str | None = None
             try:
                 self._wait_for_rate_limit_slot()
-                content = self.client.request_draft(last_error=last_error)
+                content = self.client.request_draft(
+                    language=language,
+                    target_pages=target_pages,
+                    last_error=last_error,
+                )
                 payload = parse_json_payload(content)
                 logger.debug(
                     "Received valid CV draft from model",
