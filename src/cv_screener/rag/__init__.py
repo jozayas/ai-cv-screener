@@ -41,6 +41,7 @@ from cv_screener.rag.schema import (
     RouteTarget,
     SearchFacets,
 )
+from cv_screener.rag.service import RAGQueryResult, RAGQueryService
 from cv_screener.rag.state import RAGState
 
 __all__ = [
@@ -54,6 +55,8 @@ __all__ = [
     "GraphDependencies",
     "LocalReranker",
     "PlannerOutput",
+    "RAGQueryResult",
+    "RAGQueryService",
     "RAGState",
     "RerankerProtocol",
     "RetrieverProtocol",

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from pydantic import ValidationError
 
-from cv_screener.rag.llm import build_structured_output_model, invoke_structured_output
+from cv_screener.config import RAGModelSettings
 from cv_screener.rag.prompts import PLANNER_SYSTEM_PROMPT
 from cv_screener.rag.schema import PlannerOutput, RouteDecision, RouteTarget
 
@@ -14,7 +16,6 @@ if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable, RunnableConfig
 
-    from cv_screener.config import RAGModelSettings
     from cv_screener.rag.state import RAGState
 
 
@@ -22,7 +23,18 @@ def build_planner_model(
     settings: RAGModelSettings | None = None,
 ) -> Runnable[LanguageModelInput, PlannerOutput]:
     """Build the structured planner model for OpenAI-compatible chat backends."""
-    return build_structured_output_model(PlannerOutput, settings=settings)
+    resolved_settings = settings or RAGModelSettings()
+    llm = ChatOpenAI(
+        model=resolved_settings.rag_model,
+        base_url=resolved_settings.openai_base_url,
+        api_key=resolved_settings.openai_api_key,
+        temperature=resolved_settings.rag_temperature,
+        max_retries=resolved_settings.rag_max_retries,
+    )
+    return cast(
+        "Runnable[LanguageModelInput, PlannerOutput]",
+        llm.with_structured_output(PlannerOutput, method="function_calling"),
+    )
 
 
 def plan_query(
@@ -32,13 +44,12 @@ def plan_query(
     config: RunnableConfig | None = None,
 ) -> PlannerOutput:
     """Rewrite a recruiter-style query into retrieval-friendly search text."""
-    return invoke_structured_output(
-        _build_messages(user_query),
-        model=model,
-        schema=PlannerOutput,
-        label="planner",
-        config=config,
-    )
+    result = model.invoke(_build_messages(user_query), config=config)
+    try:
+        return PlannerOutput.model_validate(result)
+    except ValidationError as error:
+        msg = f"planner returned invalid structured output: {error}"
+        raise ValueError(msg) from error
 
 
 def planner_node(
@@ -47,7 +58,10 @@ def planner_node(
     *,
     model: Runnable[LanguageModelInput, PlannerOutput],
 ) -> dict[str, PlannerOutput]:
-    """LangGraph planner node that returns a state update."""
+    """LangGraph planner node that returns a state update.
+
+    Bind ``model`` when wiring the graph, for example with ``functools.partial``.
+    """
     user_query = state.get("user_query")
     if not isinstance(user_query, str) or not user_query.strip():
         msg = "planner state must include a non-empty user_query"

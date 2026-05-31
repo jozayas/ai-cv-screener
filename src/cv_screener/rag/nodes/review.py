@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from cv_screener.rag.llm import build_structured_output_model, invoke_structured_output
+from cv_screener.rag.nodes.answer import ABSTAINED_ANSWER
+from cv_screener.rag.prompts import REVIEWER_SYSTEM_PROMPT
 from cv_screener.rag.schema import (
     AnswerCitation,
     AnswerOutput,
     ReviewOutput,
     ReviewVerdict,
 )
-from cv_screener.rag.nodes.answer import ABSTAINED_ANSWER
-from cv_screener.rag.prompts import REVIEWER_SYSTEM_PROMPT
 
 if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput

@@ -94,7 +94,7 @@ def test_router_node_returns_state_update() -> None:
     }
 
 
-def test_router_uses_function_calling_for_structured_output(
+def test_router_build_model_parses_json_without_tool_calling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -103,21 +103,10 @@ def test_router_uses_function_calling_for_structured_output(
         def __init__(self, **kwargs: object) -> None:
             captured["init"] = kwargs
 
-        def with_structured_output(
-            self,
-            schema: object,
-            *,
-            method: str,
-        ) -> Runnable[LanguageModelInput, RouteDecision]:
-            captured["schema"] = schema
-            captured["method"] = method
-            runnable, _ = make_router_runnable(
-                RouteDecision(
-                    route=RouteTarget.SMALL_TALK,
-                    reasoning="Greeting detected.",
-                )
-            )
-            return runnable
+        def invoke(self, messages: object, config: object | None = None) -> object:
+            del config
+            captured["messages"] = messages
+            return '{"route":"small_talk","reasoning":"Greeting detected."}'
 
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     decision = route_query(
@@ -134,8 +123,10 @@ def test_router_uses_function_calling_for_structured_output(
     init_kwargs = captured["init"]
     assert isinstance(init_kwargs, dict)
     assert decision.route is RouteTarget.SMALL_TALK
-    assert captured["schema"] is RouteDecision
-    assert captured["method"] == "function_calling"
+    messages = captured["messages"]
+    assert isinstance(messages, list)
+    assert "Return only valid JSON. Do not call tools." in messages[-1].content
+    assert "route" in messages[-1].content
     api_key = init_kwargs["api_key"]
     assert hasattr(api_key, "get_secret_value")
     assert api_key.get_secret_value() == "ollama"

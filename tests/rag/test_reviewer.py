@@ -8,17 +8,17 @@ from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.schema import (
-    AnswerCitation,
-    AnswerOutput,
-    ReviewOutput,
-    ReviewVerdict,
-)
 from cv_screener.rag.nodes.answer import ABSTAINED_ANSWER
 from cv_screener.rag.nodes.review import (
     build_reviewer_model,
     review_answer,
     reviewer_node,
+)
+from cv_screener.rag.schema import (
+    AnswerCitation,
+    AnswerOutput,
+    ReviewOutput,
+    ReviewVerdict,
 )
 from cv_screener.retrieval.schema import RetrievedChunk
 
@@ -145,7 +145,7 @@ def test_reviewer_node_abstains_when_citation_does_not_match_chunks() -> None:
     assert update["answer"] == AnswerOutput(answer=ABSTAINED_ANSWER, abstained=True)
 
 
-def test_reviewer_uses_function_calling_for_structured_output(
+def test_reviewer_build_model_parses_json_without_tool_calling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -154,21 +154,13 @@ def test_reviewer_uses_function_calling_for_structured_output(
         def __init__(self, **kwargs: object) -> None:
             captured["init"] = kwargs
 
-        def with_structured_output(
-            self,
-            schema: object,
-            *,
-            method: str,
-        ) -> Runnable[LanguageModelInput, ReviewOutput]:
-            captured["schema"] = schema
-            captured["method"] = method
-            runnable, _ = make_reviewer_runnable(
-                ReviewOutput(
-                    verdict=ReviewVerdict.APPROVE,
-                    reasoning="The claim is fully supported by the cited chunk.",
-                )
+        def invoke(self, messages: object, config: object | None = None) -> object:
+            del config
+            captured["messages"] = messages
+            return (
+                '{"verdict":"approve",'
+                '"reasoning":"The claim is fully supported by the cited chunk."}'
             )
-            return runnable
 
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     result = review_answer(
@@ -202,8 +194,10 @@ def test_reviewer_uses_function_calling_for_structured_output(
     init_kwargs = captured["init"]
     assert isinstance(init_kwargs, dict)
     assert result.verdict is ReviewVerdict.APPROVE
-    assert captured["schema"] is ReviewOutput
-    assert captured["method"] == "function_calling"
+    messages = captured["messages"]
+    assert isinstance(messages, list)
+    assert "Return only valid JSON. Do not call tools." in messages[-1].content
+    assert "verdict" in messages[-1].content
     api_key = init_kwargs["api_key"]
     assert hasattr(api_key, "get_secret_value")
     assert api_key.get_secret_value() == "ollama"

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
     from cv_screener.cv_generation.pdf.templates import TemplateId
     from cv_screener.ingestion.schema import IngestionSummary
+    from cv_screener.rag.service import RAGQueryResult
     from cv_screener.retrieval.schema import RetrievedChunk
 
 
@@ -41,6 +42,14 @@ class HybridRetrieverProtocol(Protocol):
         ...
 
 
+class RAGQueryServiceProtocol(Protocol):
+    """Behavior needed from the RAG runtime in CLI commands."""
+
+    def run(self, query_text: str) -> RAGQueryResult:
+        """Return the final RAG response for the given query."""
+        ...
+
+
 def build_pdf_rendering_service(
     *,
     input_dir: Path,
@@ -68,3 +77,9 @@ def build_hybrid_retriever() -> HybridRetrieverProtocol:
     """Build the hybrid retriever lazily to keep CLI help fast."""
     module = import_module("cv_screener.retrieval.hybrid")
     return cast("HybridRetrieverProtocol", module.HybridRetriever())
+
+
+def build_rag_query_service() -> RAGQueryServiceProtocol:
+    """Build the RAG query service lazily to keep CLI help fast."""
+    module = import_module("cv_screener.rag.service")
+    return cast("RAGQueryServiceProtocol", module.RAGQueryService())

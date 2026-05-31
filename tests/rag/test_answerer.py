@@ -8,13 +8,13 @@ from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.schema import AnswerCitation, AnswerOutput
 from cv_screener.rag.nodes.answer import (
     ABSTAINED_ANSWER,
     answer_query,
     answerer_node,
     build_answer_model,
 )
+from cv_screener.rag.schema import AnswerCitation, AnswerOutput
 from cv_screener.retrieval.schema import RetrievedChunk
 
 
@@ -127,7 +127,7 @@ def test_answer_query_requires_citations_for_supported_answers() -> None:
         )
 
 
-def test_answerer_uses_function_calling_for_structured_output(
+def test_answerer_build_model_parses_json_without_tool_calling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -136,27 +136,14 @@ def test_answerer_uses_function_calling_for_structured_output(
         def __init__(self, **kwargs: object) -> None:
             captured["init"] = kwargs
 
-        def with_structured_output(
-            self,
-            schema: object,
-            *,
-            method: str,
-        ) -> Runnable[LanguageModelInput, AnswerOutput]:
-            captured["schema"] = schema
-            captured["method"] = method
-            runnable, _ = make_answer_runnable(
-                AnswerOutput(
-                    answer="Ada Lovelace has Python experience.",
-                    citations=[
-                        AnswerCitation(
-                            source_file="ada.pdf",
-                            page=2,
-                            section="Experience",
-                        )
-                    ],
-                )
+        def invoke(self, messages: object, config: object | None = None) -> object:
+            del config
+            captured["messages"] = messages
+            return (
+                '{"answer":"Ada Lovelace has Python experience.",'
+                '"citations":[{"source_file":"ada.pdf","page":2,"section":"Experience"}],'
+                '"abstained":false}'
             )
-            return runnable
 
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     result = answer_query(
@@ -184,8 +171,10 @@ def test_answerer_uses_function_calling_for_structured_output(
     init_kwargs = captured["init"]
     assert isinstance(init_kwargs, dict)
     assert result.answer == "Ada Lovelace has Python experience."
-    assert captured["schema"] is AnswerOutput
-    assert captured["method"] == "function_calling"
+    messages = captured["messages"]
+    assert isinstance(messages, list)
+    assert "Return only valid JSON. Do not call tools." in messages[-1].content
+    assert "citations" in messages[-1].content
     api_key = init_kwargs["api_key"]
     assert hasattr(api_key, "get_secret_value")
     assert api_key.get_secret_value() == "ollama"
