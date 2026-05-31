@@ -21,6 +21,7 @@ from cv_screener.rag.schema import (
     BriefAnswerOutput,
     PlannerOutput,
     ReviewOutput,
+    ReviewVerdict,
     RouteDecision,
 )
 from cv_screener.rag.state import RAGState
@@ -86,7 +87,7 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_edge("retrieve", "rerank")
     _ = graph.add_edge("rerank", "answer")
     _ = graph.add_edge("answer", "review")
-    _ = graph.add_edge("review", "finalize")
+    _ = graph.add_conditional_edges("review", _next_node_after_review)
     _ = graph.add_edge("finalize", END)
 
     return graph.compile()
@@ -199,3 +200,13 @@ def _next_node_from_state(state: RAGState) -> Literal["brief_answer", "planner"]
         msg = "router state must include a route decision"
         raise TypeError(msg)
     return next_node_for_route(route)
+
+
+def _next_node_after_review(state: RAGState) -> Literal["review", "finalize"]:
+    review = state.get("review")
+    if not isinstance(review, ReviewOutput):
+        msg = "review state must include review output"
+        raise TypeError(msg)
+    if review.verdict is ReviewVerdict.REVISE:
+        return "review"
+    return "finalize"
