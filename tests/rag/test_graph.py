@@ -178,8 +178,10 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
 
     route = result.get("route")
     planner = result.get("planner")
-    assert route is not None and route.route is RouteTarget.CV_QUERY
-    assert planner is not None and planner.primary_query == "python backend engineer"
+    assert route is not None
+    assert route.route is RouteTarget.CV_QUERY
+    assert planner is not None
+    assert planner.primary_query == "python backend engineer"
     assert result.get("retrieved_chunks") == retrieved_chunks
     assert result.get("reranked_chunks") == reranked_chunks
     assert result.get("answer") == AnswerOutput(

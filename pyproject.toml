@@ -47,7 +47,7 @@ dev = [
 
 [tool.pyrefly]
 project-includes = ["src", "tests"]
-search-path = ["src"]
+search-path = ["src", "."]
 python-version = "3.12"
 python-platform = "linux"
 use-ignore-files = true
