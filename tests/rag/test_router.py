@@ -25,7 +25,9 @@ def make_router_runnable(
         invocations.append(messages)
         return response
 
-    return cast("Runnable[LanguageModelInput, RouteDecision]", RunnableLambda(invoke)), invocations
+    return cast(
+        "Runnable[LanguageModelInput, RouteDecision]", RunnableLambda(invoke)
+    ), invocations
 
 
 def test_router_parses_small_talk_and_bypasses_retrieval() -> None:
@@ -33,7 +35,6 @@ def test_router_parses_small_talk_and_bypasses_retrieval() -> None:
         {
             "route": "small_talk",
             "reasoning": "The user is greeting the assistant.",
-            "small_talk_response": "Hi. Ask me about the CVs when you're ready.",
         }
     )
     decision = route_query("hi", model=model)
@@ -41,9 +42,8 @@ def test_router_parses_small_talk_and_bypasses_retrieval() -> None:
     assert decision == RouteDecision(
         route=RouteTarget.SMALL_TALK,
         reasoning="The user is greeting the assistant.",
-        small_talk_response="Hi. Ask me about the CVs when you're ready.",
     )
-    assert next_node_for_route(decision) == "finalize"
+    assert next_node_for_route(decision) == "brief_answer"
     assert len(invocations) == 1
 
 
@@ -60,15 +60,17 @@ def test_router_sends_cv_queries_to_planner() -> None:
     assert next_node_for_route(decision) == "planner"
 
 
-def test_router_requires_clarification_text_for_clarification_route() -> None:
+def test_router_accepts_clarification_route_without_extra_payload() -> None:
     model, _ = make_router_runnable(
         {
             "route": "needs_clarification",
             "reasoning": "The request is too broad to retrieve precisely.",
         }
     )
-    with pytest.raises(ValueError, match="clarification_question"):
-        route_query("Tell me about candidates.", model=model)
+    decision = route_query("Tell me about candidates.", model=model)
+
+    assert decision.route is RouteTarget.NEEDS_CLARIFICATION
+    assert next_node_for_route(decision) == "brief_answer"
 
 
 def test_router_node_returns_state_update() -> None:
@@ -112,7 +114,6 @@ def test_router_uses_function_calling_for_structured_output(
                 RouteDecision(
                     route=RouteTarget.SMALL_TALK,
                     reasoning="Greeting detected.",
-                    small_talk_response="Hi.",
                 )
             )
             return runnable

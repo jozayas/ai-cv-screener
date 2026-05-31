@@ -1,16 +1,16 @@
-"""Router helpers and LangGraph node for the RAG workflow."""
+"""Planner helpers and LangGraph node for retrieval-oriented query rewrites."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
 from cv_screener.config import RAGModelSettings
-from cv_screener.rag.models import RouteDecision, RouteTarget
-from cv_screener.rag.prompts import ROUTER_SYSTEM_PROMPT
+from cv_screener.rag.models import PlannerOutput, RouteDecision, RouteTarget
+from cv_screener.rag.prompts import PLANNER_SYSTEM_PROMPT
 
 if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
@@ -19,10 +19,10 @@ if TYPE_CHECKING:
     from cv_screener.rag.state import RAGState
 
 
-def build_router_model(
+def build_planner_model(
     settings: RAGModelSettings | None = None,
-) -> Runnable[LanguageModelInput, RouteDecision]:
-    """Build the structured router model for OpenAI-compatible chat backends."""
+) -> Runnable[LanguageModelInput, PlannerOutput]:
+    """Build the structured planner model for OpenAI-compatible chat backends."""
     resolved_settings = settings or RAGModelSettings()
     llm = ChatOpenAI(
         model=resolved_settings.rag_model,
@@ -32,57 +32,53 @@ def build_router_model(
         max_retries=resolved_settings.rag_max_retries,
     )
     return cast(
-        "Runnable[LanguageModelInput, RouteDecision]",
-        llm.with_structured_output(RouteDecision, method="function_calling"),
+        "Runnable[LanguageModelInput, PlannerOutput]",
+        llm.with_structured_output(PlannerOutput, method="function_calling"),
     )
 
 
-def route_query(
+def plan_query(
     user_query: str,
     *,
-    model: Runnable[LanguageModelInput, RouteDecision],
+    model: Runnable[LanguageModelInput, PlannerOutput],
     config: RunnableConfig | None = None,
-) -> RouteDecision:
-    """Classify a user query using structured output."""
+) -> PlannerOutput:
+    """Rewrite a recruiter-style query into retrieval-friendly search text."""
     result = model.invoke(_build_messages(user_query), config=config)
     try:
-        return RouteDecision.model_validate(result)
+        return PlannerOutput.model_validate(result)
     except ValidationError as error:
-        msg = f"router returned invalid structured output: {error}"
+        msg = f"planner returned invalid structured output: {error}"
         raise ValueError(msg) from error
 
 
 
-def router_node(
+def planner_node(
     state: RAGState,
     config: RunnableConfig | None = None,
     *,
-    model: Runnable[LanguageModelInput, RouteDecision],
-) -> dict[str, RouteDecision]:
-    """LangGraph router node that returns a state update.
+    model: Runnable[LanguageModelInput, PlannerOutput],
+) -> dict[str, PlannerOutput]:
+    """LangGraph planner node that returns a state update.
 
     Bind ``model`` when wiring the graph, for example with ``functools.partial``.
     """
     user_query = state.get("user_query")
     if not isinstance(user_query, str) or not user_query.strip():
-        msg = "router state must include a non-empty user_query"
+        msg = "planner state must include a non-empty user_query"
         raise ValueError(msg)
-    return {"route": route_query(user_query, model=model, config=config)}
 
+    route = state.get("route")
+    if not isinstance(route, RouteDecision) or route.route is not RouteTarget.CV_QUERY:
+        msg = "planner state must include route=cv_query"
+        raise ValueError(msg)
 
-
-def next_node_for_route(
-    decision: RouteDecision,
-) -> Literal["planner", "brief_answer"]:
-    """Map a router decision to the next graph node name."""
-    if decision.route is RouteTarget.CV_QUERY:
-        return "planner"
-    return "brief_answer"
+    return {"planner": plan_query(user_query, model=model, config=config)}
 
 
 
 def _build_messages(user_query: str) -> list[SystemMessage | HumanMessage]:
     return [
-        SystemMessage(content=ROUTER_SYSTEM_PROMPT),
+        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
         HumanMessage(content=user_query),
     ]

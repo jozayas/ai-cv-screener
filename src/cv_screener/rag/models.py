@@ -20,28 +20,6 @@ class RouteDecision(BaseModel):
 
     route: RouteTarget
     reasoning: str = Field(min_length=1)
-    small_talk_response: str | None = Field(default=None, min_length=1)
-    clarification_question: str | None = Field(default=None, min_length=1)
-
-    @model_validator(mode="after")
-    def validate_route_payload(self) -> RouteDecision:
-        """Require the route-specific text fields needed by downstream nodes."""
-        if (
-            self.route is RouteTarget.SMALL_TALK
-            and self.small_talk_response is None
-        ):
-            msg = "small_talk_response is required when route=small_talk"
-            raise ValueError(msg)
-        if (
-            self.route is RouteTarget.NEEDS_CLARIFICATION
-            and self.clarification_question is None
-        ):
-            msg = (
-                "clarification_question is required when "
-                "route=needs_clarification"
-            )
-            raise ValueError(msg)
-        return self
 
 
 class SearchFacets(BaseModel):
@@ -77,6 +55,25 @@ class AnswerOutput(BaseModel):
     citations: list[AnswerCitation] = Field(default_factory=list)
     abstained: bool = Field(default=False)
 
+    @model_validator(mode="after")
+    def validate_answer_payload(self) -> AnswerOutput:
+        """Require citations for substantive answers and none for abstentions."""
+        if self.abstained:
+            if self.citations:
+                msg = "abstained answers must not include citations"
+                raise ValueError(msg)
+            return self
+        if not self.citations:
+            msg = "citations are required when abstained=False"
+            raise ValueError(msg)
+        return self
+
+
+class BriefAnswerOutput(BaseModel):
+    """Structured direct reply for non-retrieval turns."""
+
+    text: str = Field(min_length=1)
+
 
 class ReviewVerdict(StrEnum):
     """Supported reviewer outcomes."""
@@ -92,3 +89,14 @@ class ReviewOutput(BaseModel):
     verdict: ReviewVerdict
     reasoning: str = Field(min_length=1)
     revised_answer: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_review_payload(self) -> ReviewOutput:
+        """Require a revised answer only for revise verdicts."""
+        if self.verdict is ReviewVerdict.REVISE and self.revised_answer is None:
+            msg = "revised_answer is required when verdict=revise"
+            raise ValueError(msg)
+        if self.verdict is not ReviewVerdict.REVISE and self.revised_answer is not None:
+            msg = "revised_answer is only allowed when verdict=revise"
+            raise ValueError(msg)
+        return self

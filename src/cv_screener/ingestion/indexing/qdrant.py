@@ -107,9 +107,7 @@ class QdrantChunkIndexer:
 
         sparse_vectors: list[dict[int, float]] | None = None
         if self.config.enable_bm25 and self._bm25_encoder is not None:
-            sparse_vectors = self._bm25_encoder.encode(
-                [chunk.text for chunk in chunks]
-            )
+            sparse_vectors = self._bm25_encoder.encode([chunk.text for chunk in chunks])
 
         points = build_points(
             chunks,

@@ -80,9 +80,7 @@ def test_retrieve_uses_dense_and_sparse_prefetch() -> None:
     client = FakeQdrantClient()
     client.response_points = [_make_scored_point(idx=0)]
     retriever = HybridRetriever(
-        config=HybridRetrievalConfig(
-            semantic_top_k=5, bm25_top_k=7, fusion_top_k=3
-        ),
+        config=HybridRetrievalConfig(semantic_top_k=5, bm25_top_k=7, fusion_top_k=3),
         client=client,
         embedding_model=FakeEmbeddingModel(),
         bm25_encoder=FakeBM25Encoder(),

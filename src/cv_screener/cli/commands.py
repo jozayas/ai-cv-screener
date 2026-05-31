@@ -227,7 +227,9 @@ def query(
         return
     typer.echo(f"Top {min(top_k, len(results))} results for: {query_text}\n")
     for chunk in results[:top_k]:
-        typer.echo(f"  [{chunk.rank}] (score: {chunk.score:.4f}) {_format_citation(chunk)}")
+        typer.echo(
+            f"  [{chunk.rank}] (score: {chunk.score:.4f}) {_format_citation(chunk)}"
+        )
         if chunk.candidate_name:
             typer.echo(f"       Candidate: {chunk.candidate_name}")
         suffix = "..." if len(chunk.text) > max_length else ""

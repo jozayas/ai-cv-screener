@@ -32,6 +32,9 @@ class BM25Encoder:
         """
         results = list(self._model.embed(texts))
         return [
-            {int(idx): float(val) for idx, val in zip(result.indices, result.values, strict=True)}
+            {
+                int(idx): float(val)
+                for idx, val in zip(result.indices, result.values, strict=True)
+            }
             for result in results
         ]
