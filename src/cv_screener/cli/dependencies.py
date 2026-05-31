@@ -126,7 +126,9 @@ def build_hybrid_retriever() -> HybridRetrieverProtocol:
     return cast("HybridRetrieverProtocol", module.HybridRetriever())
 
 
-def build_rag_query_service(*, candidate_name_min_score: float) -> RAGQueryServiceProtocol:
+def build_rag_query_service(
+    *, candidate_name_min_score: float
+) -> RAGQueryServiceProtocol:
     """Build the RAG query service lazily to keep CLI help fast."""
     module = import_module("cv_screener.rag.service")
     return cast(

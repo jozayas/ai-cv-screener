@@ -1,3 +1,9 @@
+{% macro render_headshot(photo_path, full_name, class_name="headshot") -%}
+  {% if photo_path %}
+    <img class="{{ class_name }}" src="{{ photo_path }}" alt="{{ full_name }} headshot">
+  {% endif %}
+{%- endmacro %}
+
 {% macro render_section(section) -%}
   <section class="section section-{{ section["kind"] }}">
     <h2>{{ section["title"] }}</h2>

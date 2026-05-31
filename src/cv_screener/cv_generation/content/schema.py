@@ -50,6 +50,7 @@ class CVProfileDraft(BaseModel):
     skills: list[str] = Field(min_length=1)
     experience: list[ExperienceEntry] = Field(min_length=1)
     education: list[EducationEntry] = Field(min_length=1)
+    photo_path: str | None = Field(default=None, min_length=1)
 
 
 class CVProfile(CVProfileDraft):

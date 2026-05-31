@@ -27,6 +27,16 @@
       }
       .identity {
         margin-bottom: 0.68rem;
+        text-align: center;
+      }
+      .headshot {
+        border: 1px solid #c8b9ae;
+        border-radius: 50%;
+        display: block;
+        height: 28mm;
+        margin: 0 auto 0.6rem;
+        object-fit: cover;
+        width: 28mm;
       }
       .identity h1 {
         color: #2d2520;
@@ -75,6 +85,7 @@
     <main class="layout" data-template-name="{{ template_name }}">
       <aside class="sidebar">
         <header class="identity">
+          {{ macros.render_headshot(profile.photo_path, profile.full_name) }}
           <h1>{{ profile.full_name }}</h1>
           <p>{{ profile.location }}</p>
           <p class="contact">{{ profile.email }}<br>{{ profile.phone }}</p>

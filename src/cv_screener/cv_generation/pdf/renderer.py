@@ -63,7 +63,7 @@ class CVPDFRenderer:
     def _write_pdf_from_html(html: str, output_path: Path) -> None:
         """Write rendered HTML to a PDF file with WeasyPrint."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        HTML(string=html).write_pdf(output_path)
+        HTML(string=html, base_url=str(Path.cwd())).write_pdf(output_path)
 
 
 class PDFRenderingService:

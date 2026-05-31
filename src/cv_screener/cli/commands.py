@@ -93,13 +93,6 @@ def generate_cvs(
         writable=True,
         help="Directory where PDF CVs will be written.",
     ),
-    photo_dir: Path = typer.Option(
-        Path("data/generated/photos"),
-        file_okay=False,
-        dir_okay=True,
-        writable=True,
-        help="Directory where generated CV photos will be written.",
-    ),
     template_id: Annotated[
         TemplateId | None,
         typer.Option(
@@ -118,9 +111,11 @@ def generate_cvs(
     photo_summary = generate_cv_photo_files(
         ctx=None,
         paths=written_files,
-        photo_dir=photo_dir,
+        photo_dir=Path("data/generated/photos"),
     )
-    typer.echo(f"Prepared {photo_summary.generated_count} CV photos in {photo_dir}.")
+    typer.echo(
+        f"Prepared {photo_summary.generated_count} CV photos in {Path('data/generated/photos')}."
+    )
     rendered_files = build_pdf_rendering_service(
         input_dir=content_dir,
         output_dir=pdf_dir,

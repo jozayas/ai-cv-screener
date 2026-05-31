@@ -19,7 +19,7 @@ def write_cv_profile(path: Path, profile: CVProfile) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as file:
         yaml.safe_dump(
-            profile.model_dump(mode="json"),
+            profile.model_dump(mode="json", exclude_none=True),
             file,
             sort_keys=False,
             allow_unicode=False,

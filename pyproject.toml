@@ -17,7 +17,6 @@ dependencies = [
     "langchain-openai>=1.2.2",
     "langchain-text-splitters>=1.1.2",
     "langgraph>=1.2.2",
-    "langsmith>=0.8.7",
     "loguru>=0.7.3",
     "openai>=2.38.0",
     "phonenumbers>=9.0.31",
