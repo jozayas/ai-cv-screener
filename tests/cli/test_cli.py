@@ -367,3 +367,39 @@ def test_query_command_runs_rag_service_and_prints_grounded_answer(
         "Sources:\n"
         "- ada-lovelace.pdf (page 2, Experience)\n"
     )
+
+
+def test_serve_command_runs_chainlit_launcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[cli_commands.ChainlitServeRequest] = []
+
+    class FakeLauncher:
+        def run(self, request: cli_commands.ChainlitServeRequest) -> int:
+            calls.append(request)
+            return 0
+
+    monkeypatch.setattr(cli_commands, "build_chainlit_launcher", FakeLauncher)
+
+    result = runner.invoke(
+        cli_app,
+        [
+            "--color",
+            "never",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9000",
+            "--open-browser",
+            "--watch",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    request = calls[0]
+    assert request.host == "127.0.0.1"
+    assert request.port == 9000
+    assert request.headless is False
+    assert request.watch is True

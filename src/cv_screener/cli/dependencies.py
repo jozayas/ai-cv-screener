@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from cv_screener.cli.serve import ChainlitLauncher
     from cv_screener.cv_generation.pdf.templates import TemplateId
     from cv_screener.ingestion.schema import IngestionSummary
     from cv_screener.rag.service import RAGQueryResult
@@ -83,3 +84,9 @@ def build_rag_query_service() -> RAGQueryServiceProtocol:
     """Build the RAG query service lazily to keep CLI help fast."""
     module = import_module("cv_screener.rag.service")
     return cast("RAGQueryServiceProtocol", module.RAGQueryService())
+
+
+def build_chainlit_launcher() -> ChainlitLauncher:
+    """Build the Chainlit launcher lazily to keep CLI help fast."""
+    module = import_module("cv_screener.cli.serve")
+    return cast("ChainlitLauncher", module.ChainlitLauncher())

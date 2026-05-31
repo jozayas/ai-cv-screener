@@ -6,12 +6,14 @@ from typing import Annotated
 import typer
 
 from cv_screener.cli.dependencies import (
+    build_chainlit_launcher,
     build_cv_ingestion_service,
     build_pdf_rendering_service,
     build_rag_query_service,
 )
 from cv_screener.cli.generation import generate_cv_content_files
 from cv_screener.cli.runtime import init_command
+from cv_screener.cli.serve import ChainlitServeRequest, default_chainlit_app_path
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     GenerationMode,
@@ -28,6 +30,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("render")(render)
     app.command("ingest")(ingest)
     app.command("query")(query)
+    app.command("serve")(serve)
 
 
 def generate_content(
@@ -210,3 +213,37 @@ def query(
     init_command(ctx)
     result = build_rag_query_service().run(query_text)
     typer.echo(result.final_text)
+
+
+def serve(
+    ctx: typer.Context,
+    *,
+    host: str = typer.Option("127.0.0.1", help="Host interface for the Chainlit UI."),
+    port: int = typer.Option(8000, min=1, max=65535, help="Port for the Chainlit UI."),
+    headless: Annotated[
+        bool,
+        typer.Option(
+            "--headless/--open-browser",
+            help="Run without asking Chainlit to open a browser window.",
+        ),
+    ] = True,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch/--no-watch",
+            help="Reload the app when source files change.",
+        ),
+    ] = False,
+) -> None:
+    """Serve the Chainlit chat UI on top of the existing RAG runtime."""
+    init_command(ctx)
+    request = ChainlitServeRequest(
+        app_path=default_chainlit_app_path(),
+        host=host,
+        port=port,
+        headless=headless,
+        watch=watch,
+    )
+    exit_code = build_chainlit_launcher().run(request)
+    if exit_code != 0:
+        raise typer.Exit(code=exit_code)
