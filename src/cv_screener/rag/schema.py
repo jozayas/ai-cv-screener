@@ -31,6 +31,17 @@ class SearchFacets(BaseModel):
     seniority: str | None = Field(default=None, min_length=1)
     education: str | None = Field(default=None, min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_null_lists(cls, data: dict) -> dict:
+        """Coerce None list fields to empty lists before validation."""
+        if not isinstance(data, dict):
+            return data
+        for field in ("skills", "languages", "roles"):
+            if data.get(field) is None:
+                data[field] = []
+        return data
+
 
 class PlannerOutput(BaseModel):
     """Structured query rewrite result for retrieval."""
@@ -39,10 +50,22 @@ class PlannerOutput(BaseModel):
     alternate_queries: list[str] = Field(default_factory=list, max_length=2)
     facets: SearchFacets = Field(default_factory=SearchFacets)
 
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_null_alternate_queries(cls, data: dict) -> dict:
+        """Coerce None alternate_queries to empty list before validation."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("alternate_queries") is None:
+            data["alternate_queries"] = []
+        return data
+
 
 class AnswerCitation(BaseModel):
     """Citation metadata carried into final answers."""
 
+    rank: int = Field(ge=1, description="Reranker rank used as the citation number.")
+    candidate_name: str | None = Field(default=None, min_length=1)
     source_file: str = Field(min_length=1)
     page: int = Field(ge=1)
     section: str = Field(min_length=1)
@@ -54,6 +77,16 @@ class AnswerOutput(BaseModel):
     answer: str = Field(min_length=1)
     citations: list[AnswerCitation] = Field(default_factory=list)
     abstained: bool = Field(default=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_citations_when_abstained(cls, data: dict) -> dict:
+        """Strip citations when abstained is explicitly true."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("abstained") is True:
+            data["citations"] = []
+        return data
 
     @model_validator(mode="after")
     def validate_answer_payload(self) -> AnswerOutput:

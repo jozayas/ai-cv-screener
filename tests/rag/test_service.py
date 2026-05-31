@@ -44,6 +44,8 @@ def test_rag_query_service_returns_final_graph_output() -> None:
                     answer="Ada Lovelace has Python backend experience.",
                     citations=[
                         AnswerCitation(
+                            rank=1,
+                            candidate_name="Ada Lovelace",
                             source_file="ada-lovelace.pdf",
                             page=2,
                             section="Experience",
@@ -65,6 +67,6 @@ def test_rag_query_service_returns_final_graph_output() -> None:
     assert result.final_text == (
         "Ada Lovelace has Python backend experience.\n\n"
         "Sources:\n"
-        "- ada-lovelace.pdf (page 2, Experience)"
+        "[1] Ada Lovelace - ada-lovelace.pdf (page 2, Experience)"
     )
     assert result.state["final_text"] == result.final_text

@@ -81,6 +81,7 @@ def test_graph_bypasses_planner_and_retrieval_for_small_talk() -> None:
                 answer="unused",
                 citations=[
                     AnswerCitation(
+                        rank=1,
                         source_file="ignored.pdf",
                         page=1,
                         section="Summary",
@@ -155,6 +156,8 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
                 answer="Ada Lovelace has Python backend experience.",
                 citations=[
                     AnswerCitation(
+                        rank=2,
+                        candidate_name="Ada Lovelace",
                         source_file="ada-lovelace.pdf",
                         page=2,
                         section="Experience",
@@ -182,12 +185,36 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
     assert route.route is RouteTarget.CV_QUERY
     assert planner is not None
     assert planner.primary_query == "python backend engineer"
-    assert result.get("retrieved_chunks") == retrieved_chunks
+    merged_chunks = [
+        RetrievedChunk(
+            candidate_name="Grace Hopper",
+            source_file="grace-hopper.pdf",
+            document_title="Grace Hopper CV",
+            page=3,
+            section="Experience",
+            text="Led compiler modernization initiatives.",
+            score=0.81,
+            rank=1,
+        ),
+        RetrievedChunk(
+            candidate_name="Ada Lovelace",
+            source_file="ada-lovelace.pdf",
+            document_title="Ada Lovelace CV",
+            page=2,
+            section="Experience",
+            text="Built Python data pipelines and internal APIs.",
+            score=0.72,
+            rank=2,
+        ),
+    ]
+    assert result.get("retrieved_chunks") == merged_chunks
     assert result.get("reranked_chunks") == reranked_chunks
     assert result.get("answer") == AnswerOutput(
         answer="Ada Lovelace has Python backend experience.",
         citations=[
             AnswerCitation(
+                rank=2,
+                candidate_name="Ada Lovelace",
                 source_file="ada-lovelace.pdf",
                 page=2,
                 section="Experience",
@@ -201,7 +228,12 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
     assert result.get("final_text") == (
         "Ada Lovelace has Python backend experience.\n\n"
         "Sources:\n"
-        "- ada-lovelace.pdf (page 2, Experience)"
+        "[2] Ada Lovelace - ada-lovelace.pdf (page 2, Experience)"
     )
-    assert retriever.queries == ["python backend engineer"]
-    assert reranker.calls == [("python backend engineer", retrieved_chunks, None)]
+    assert retriever.queries == [
+        "python backend engineer",
+        "python api engineer",
+    ]
+    assert reranker.calls == [
+        ("python backend engineer", merged_chunks, None)
+    ]

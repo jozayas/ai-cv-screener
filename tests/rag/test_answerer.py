@@ -37,7 +37,7 @@ def test_answer_query_abstains_without_chunks() -> None:
         AnswerOutput(
             answer="unused",
             citations=[
-                AnswerCitation(source_file="ada.pdf", page=1, section="Summary")
+                AnswerCitation(rank=1, source_file="ada.pdf", page=1, section="Summary")
             ],
         )
     )
@@ -54,6 +54,7 @@ def test_answerer_node_uses_reranked_chunks() -> None:
             answer="Ada Lovelace has Python backend experience.",
             citations=[
                 AnswerCitation(
+                    rank=1,
                     source_file="ada-lovelace.pdf",
                     page=2,
                     section="Experience",
@@ -95,6 +96,7 @@ def test_answerer_node_uses_reranked_chunks() -> None:
             answer="Ada Lovelace has Python backend experience.",
             citations=[
                 AnswerCitation(
+                    rank=1,
                     source_file="ada-lovelace.pdf",
                     page=2,
                     section="Experience",
@@ -141,7 +143,7 @@ def test_answerer_build_model_parses_json_without_tool_calling(
             captured["messages"] = messages
             return (
                 '{"answer":"Ada Lovelace has Python experience.",'
-                '"citations":[{"source_file":"ada.pdf","page":2,"section":"Experience"}],'
+                '"citations":[{"rank":1,"source_file":"ada.pdf","page":2,"section":"Experience"}],'
                 '"abstained":false}'
             )
 
@@ -178,3 +180,33 @@ def test_answerer_build_model_parses_json_without_tool_calling(
     api_key = init_kwargs["api_key"]
     assert hasattr(api_key, "get_secret_value")
     assert api_key.get_secret_value() == "ollama"
+
+
+def test_answer_output_strips_citations_when_abstained() -> None:
+    """Before-validator strips citations when abstained=True."""
+    result = AnswerOutput(
+        answer="No relevant candidates found.",
+        citations=[AnswerCitation(rank=1, source_file="cv.pdf", page=1, section="Skills")],
+        abstained=True,
+    )
+    assert result.abstained is True
+    assert result.citations == []
+    assert result.answer == "No relevant candidates found."
+
+
+def test_answer_output_non_abstained_still_requires_citations() -> None:
+    """After-validator still rejects non-abstained answers without citations."""
+    with pytest.raises(ValueError, match="citations"):
+        AnswerOutput(answer="Ada has Python experience.", abstained=False)
+
+
+def test_answer_output_non_abstained_with_citations_works() -> None:
+    """Normal non-abstained answers with citations still validate correctly."""
+    result = AnswerOutput(
+        answer="Ada has Python experience.",
+        citations=[AnswerCitation(rank=1, source_file="ada.pdf", page=2, section="Skills")],
+        abstained=False,
+    )
+    assert result.abstained is False
+    assert len(result.citations) == 1
+    assert result.citations[0].source_file == "ada.pdf"

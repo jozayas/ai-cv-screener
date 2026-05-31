@@ -8,6 +8,7 @@ import chainlit as cl
 
 from cv_screener.chainlit.ui import (
     EMPTY_QUERY_MESSAGE,
+    RUNTIME_ERROR_MESSAGE,
     WELCOME_MESSAGE,
     format_chat_response,
 )
@@ -43,6 +44,18 @@ async def on_message(message: cl.Message) -> None:
         _ = await cl.Message(content=EMPTY_QUERY_MESSAGE).send()
         return
 
-    service = _get_query_service()
-    result = await cl.make_async(service.run)(query_text)
-    _ = await cl.Message(content=format_chat_response(result)).send()
+    try:
+        async with cl.Step(name="Searching CVs") as step:
+            step.input = query_text
+            service = _get_query_service()
+            result = await cl.make_async(service.run)(query_text)
+            step.output = "Done"
+
+        formatted = format_chat_response(result)
+        msg = cl.Message(content="")
+        await msg.send()
+        for token in formatted.split(" "):
+            await msg.stream_token(token + " ")
+        await msg.update()
+    except (ValueError, TypeError, RuntimeError) as exc:
+        _ = await cl.Message(content=f"{RUNTIME_ERROR_MESSAGE}\n\nDetails: {exc}").send()

@@ -11,11 +11,15 @@ def test_format_chat_response_prefers_structured_answer_with_sources() -> None:
                 answer="Ada Lovelace has Python backend experience.",
                 citations=[
                     AnswerCitation(
+                        rank=1,
+                        candidate_name="Ada Lovelace",
                         source_file="ada.pdf",
                         page=2,
                         section="Experience",
                     ),
                     AnswerCitation(
+                        rank=1,
+                        candidate_name="Ada Lovelace",
                         source_file="ada.pdf",
                         page=2,
                         section="Experience",
@@ -28,7 +32,7 @@ def test_format_chat_response_prefers_structured_answer_with_sources() -> None:
     assert format_chat_response(result) == (
         "Ada Lovelace has Python backend experience.\n\n"
         "Sources:\n"
-        "- ada.pdf (page 2, Experience)"
+        "[1] Ada Lovelace - ada.pdf (page 2, Experience)"
     )
 
 

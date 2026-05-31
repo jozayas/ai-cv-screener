@@ -18,7 +18,7 @@ WELCOME_MESSAGE = (
     "- Summarize the profile of Ada Lovelace."
 )
 EMPTY_QUERY_MESSAGE = "Enter a recruiter-style question about the indexed CVs."
-RUNTIME_ERROR_MESSAGE = "I couldn't query the indexed CVs. Check that the PDFs are ingested and the local model services are running."
+RUNTIME_ERROR_MESSAGE = "**Error:** I couldn't query the indexed CVs. Check that the PDFs are ingested and the local model services are running."
 
 
 def format_chat_response(result: RAGQueryResult) -> str:
