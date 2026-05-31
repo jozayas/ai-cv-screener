@@ -58,4 +58,7 @@ def test_chainlit_launcher_runs_uvicorn_with_factory_target(
 
 
 def test_chainlit_url_points_to_mounted_app() -> None:
-    assert _chainlit_url("127.0.0.1", 8000) == f"http://127.0.0.1:8000{CHAINLIT_MOUNT_PATH}"
+    assert (
+        _chainlit_url("127.0.0.1", 8000)
+        == f"http://127.0.0.1:8000{CHAINLIT_MOUNT_PATH}"
+    )
