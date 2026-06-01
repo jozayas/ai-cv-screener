@@ -41,6 +41,8 @@ _UNIVERSITY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _MARKDOWN_TOKEN_PATTERN = re.compile(r"[*_`]+")
+_SKILL_SEPARATOR_PATTERN = re.compile(r"[,•▪\n]+")
+_MAX_SKILL_NAME_LENGTH = 50
 
 
 class CanonicalStoreProtocol(Protocol):
@@ -94,9 +96,33 @@ def _looks_like_institution(value: str) -> bool:
 
 
 def _skill_names_from_chunks(chunks_to_extract: list[Chunk]) -> list[str]:
-    return _dedupe_extracted_values(
-        [skill for chunk in chunks_to_extract for skill in chunk.detected_skills]
-    )
+    detected = [
+        skill
+        for chunk in chunks_to_extract
+        if chunk.section.casefold() == "skills"
+        for skill in chunk.detected_skills
+    ]
+    parsed_from_skills_text = [
+        skill
+        for chunk in chunks_to_extract
+        if chunk.section.casefold() == "skills"
+        for skill in _parse_skill_list_text(chunk.text)
+    ]
+    return _dedupe_extracted_values([*detected, *parsed_from_skills_text])
+
+
+def _parse_skill_list_text(text: str) -> list[str]:
+    cleaned = _MARKDOWN_TOKEN_PATTERN.sub("", text)
+    skills: list[str] = []
+    for raw_part in _SKILL_SEPARATOR_PATTERN.split(cleaned):
+        part = raw_part.strip(" \t\r\n-;.")
+        if not part:
+            continue
+        if ":" in part:
+            part = part.rsplit(":", maxsplit=1)[1].strip()
+        if part and len(part) <= _MAX_SKILL_NAME_LENGTH:
+            skills.append(part)
+    return skills
 
 
 def _education_institutions_from_chunks(chunks_to_extract: list[Chunk]) -> list[str]:

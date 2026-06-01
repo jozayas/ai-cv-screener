@@ -116,10 +116,13 @@ def _is_targeted_lookup_query(lowered: str) -> bool:
         return True
     if re.search(r"\bsummarize\b", lowered) and "experience" not in lowered:
         return True
-    skill_match = re.search(r"\bwho (?:has|knows)\s+(.+?)[?.!]*$", lowered)
+    skill_match = re.search(
+        r"\bwho (?:has experience with\s+(.+?)|(?:has|knows)\s+(.+?))[?.!]*$",
+        lowered,
+    )
     if skill_match is None:
         return False
-    skill_tail = skill_match.group(1)
+    skill_tail = next(group for group in skill_match.groups() if group is not None)
     has_simple_experience_skill = bool(
         re.fullmatch(r"[a-z0-9+#./-]+\s+experience", skill_tail)
     )

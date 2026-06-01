@@ -129,24 +129,50 @@ def _format_candidate_list_response(
     retrieved_chunks: Sequence[Any],
     targeted_lookup: object,
 ) -> str:
-    candidate_names = getattr(targeted_lookup, "candidate_names", None)
-    if isinstance(candidate_names, list) and candidate_names:
-        names = [str(name) for name in candidate_names if str(name).strip()]
-    else:
-        names = []
-        seen_names: set[str] = set()
-        for chunk in retrieved_chunks:
-            candidate_name = getattr(chunk, "candidate_name", None)
-            if not candidate_name or candidate_name in seen_names:
-                continue
-            seen_names.add(candidate_name)
-            names.append(str(candidate_name))
-
+    names = _candidate_names_for_list_response(retrieved_chunks, targeted_lookup)
     if not names:
         return "I don't have enough information in the indexed CVs to answer that."
 
-    citations: list[str] = []
+    citation_entries = _candidate_list_citation_entries(retrieved_chunks, names)
+    citations = [entry[1] for entry in citation_entries]
+    if citations:
+        names = [entry[0] for entry in citation_entries]
+    answer_text = _format_candidate_list_answer_text(
+        names,
+        include_citation_marker=bool(citations),
+    )
+    if citations:
+        return "\n\n".join([answer_text, "Sources:\n" + "\n".join(citations)])
+    return answer_text
+
+
+def _candidate_names_for_list_response(
+    retrieved_chunks: Sequence[Any],
+    targeted_lookup: object,
+) -> list[str]:
+    candidate_names = getattr(targeted_lookup, "candidate_names", None)
+    if isinstance(candidate_names, list) and candidate_names:
+        return [str(name) for name in candidate_names if str(name).strip()]
+
+    names: list[str] = []
+    seen_names: set[str] = set()
+    for chunk in retrieved_chunks:
+        candidate_name = getattr(chunk, "candidate_name", None)
+        if not candidate_name or candidate_name in seen_names:
+            continue
+        seen_names.add(candidate_name)
+        names.append(str(candidate_name))
+    return names
+
+
+def _candidate_list_citation_entries(
+    retrieved_chunks: Sequence[Any],
+    names: list[str],
+) -> list[tuple[str, str]]:
+    citation_entries: list[tuple[str, str]] = []
+    normalized_names = {name.casefold() for name in names}
     seen_sources: set[tuple[str, int, str]] = set()
+    seen_cited_names: set[str] = set()
     for chunk in retrieved_chunks:
         source_file = getattr(chunk, "source_file", "")
         page = getattr(chunk, "page", 0)
@@ -155,19 +181,22 @@ def _format_candidate_list_response(
         key = (source_file, page, section)
         if key in seen_sources or not source_file or page <= 0 or not section:
             continue
-        if candidate_name and candidate_name in names:
+        if candidate_name:
+            normalized_candidate_name = str(candidate_name).casefold()
+            if normalized_candidate_name not in normalized_names:
+                continue
+            if normalized_candidate_name in seen_cited_names:
+                continue
             seen_sources.add(key)
-            citations.append(
-                f"[{len(citations) + 1}] {candidate_name} - {source_file} (page {page}, {section})"
+            seen_cited_names.add(normalized_candidate_name)
+            citation_entries.append(
+                (
+                    str(candidate_name),
+                    f"[{len(citation_entries) + 1}] {candidate_name} - "
+                    f"{source_file} (page {page}, {section})",
+                )
             )
-
-    answer_text = _format_candidate_list_answer_text(
-        names,
-        include_citation_marker=bool(citations),
-    )
-    if citations:
-        return "\n\n".join([answer_text, "Sources:\n" + "\n".join(citations)])
-    return answer_text
+    return citation_entries
 
 
 def _format_candidate_list_answer_text(

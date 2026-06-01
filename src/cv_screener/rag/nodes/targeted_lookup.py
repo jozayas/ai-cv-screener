@@ -72,6 +72,12 @@ def hydrate_chunks_node(
         candidate_ids=lookup.candidate_ids,
         sections=None if lookup.response_mode == "profile" else lookup.sections or None,
     )
+    if lookup.response_mode == "list_candidates" and lookup.evidence_term:
+        chunks = _matching_chunks_by_candidate(
+            chunks,
+            candidate_names=lookup.candidate_names,
+            evidence_term=lookup.evidence_term,
+        )
     return {"retrieved_chunks": chunks}
 
 
@@ -175,10 +181,13 @@ def _resolve_lookup(
         )
 
     skill_match = re.search(
-        r"\bwho (?:has|knows)\s+(.+?)[?.!]*$", user_query, re.IGNORECASE
+        r"\bwho (?:has experience with\s+(.+?)|(?:has|knows)\s+(.+?))[?.!]*$",
+        user_query,
+        re.IGNORECASE,
     )
     if skill_match is not None:
-        skill = _normalize_skill_lookup(skill_match.group(1))
+        raw_skill = next(group for group in skill_match.groups() if group is not None)
+        skill = _normalize_skill_lookup(raw_skill)
         blocked_terms = ("background", "worked", "leadership")
         if not any(term in skill.casefold() for term in blocked_terms):
             candidates = lookup_service.find_candidates_by_skill(skill)
@@ -186,6 +195,7 @@ def _resolve_lookup(
                 candidate_ids=[candidate.candidate_id for candidate in candidates],
                 candidate_names=[candidate.full_name for candidate in candidates],
                 sections=["SKILLS", "EXPERIENCE", "PROJECTS"],
+                evidence_term=skill,
                 response_mode="list_candidates",
                 fallback_to_semantic=False,
             )
@@ -241,6 +251,47 @@ def _normalize_skill_lookup(raw_skill: str) -> str:
     if experience_suffix is not None:
         return experience_suffix.group("skill").strip()
     return skill
+
+
+def _matching_chunks_by_candidate(
+    chunks: list[RetrievedChunk],
+    *,
+    candidate_names: list[str],
+    evidence_term: str,
+) -> list[RetrievedChunk]:
+    """Keep one chunk per candidate whose text contains the targeted evidence term."""
+    normalized_term = _normalize_evidence_text(evidence_term)
+    if not normalized_term:
+        return chunks
+
+    ordered_candidate_names = [
+        name for name in candidate_names if _normalize_evidence_text(name)
+    ]
+    candidate_order = {
+        _normalize_evidence_text(name): index
+        for index, name in enumerate(ordered_candidate_names)
+    }
+    matches: dict[str, RetrievedChunk] = {}
+    for chunk in chunks:
+        candidate_name = chunk.candidate_name
+        if not candidate_name:
+            continue
+        normalized_candidate_name = _normalize_evidence_text(candidate_name)
+        if normalized_candidate_name not in candidate_order:
+            continue
+        if normalized_term not in _normalize_evidence_text(chunk.text):
+            continue
+        matches.setdefault(normalized_candidate_name, chunk)
+
+    return [
+        matches[name]
+        for name, _index in sorted(candidate_order.items(), key=lambda item: item[1])
+        if name in matches
+    ]
+
+
+def _normalize_evidence_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.casefold()).strip()
 
 
 def _extract_candidate_name_for_cv(user_query: str) -> str:

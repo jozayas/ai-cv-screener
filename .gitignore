@@ -222,3 +222,6 @@ __marimo__/
 data/*
 .chainlit/
 .files/
+
+./sqlite_data
+./qdrant_data

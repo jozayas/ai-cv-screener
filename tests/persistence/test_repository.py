@@ -69,15 +69,33 @@ def test_repository_persists_candidate_document_and_chunks(tmp_path: Path) -> No
             ParsedPage(page_number=1, markdown="## **SUMMARY**\n\nBackend engineer.")
         ],
     )
-    chunk = Chunk.model_validate(
+    skill_chunk = Chunk.model_validate(
         {
             "candidate_name": "Jane Doe",
             "source_file": pdf_path.name,
             "document_title": "Jane Doe CV",
             "page": 1,
             "chunk_index": 0,
-            "section": "SUMMARY",
-            "detected_skills": ["Python", "FastAPI"],
+            "section": "SKILLS",
+            "detected_skills": [],
+            "detected_companies": [],
+            "detected_universities": [],
+            "email_addresses": [],
+            "phone_numbers": [],
+            "linkedin_urls": [],
+            "github_urls": [],
+            "text": "Python, FastAPI",
+        }
+    )
+    education_chunk = Chunk.model_validate(
+        {
+            "candidate_name": "Jane Doe",
+            "source_file": pdf_path.name,
+            "document_title": "Jane Doe CV",
+            "page": 1,
+            "chunk_index": 1,
+            "section": "EDUCATION",
+            "detected_skills": [],
             "detected_companies": [],
             "detected_universities": ["UPC"],
             "email_addresses": [],
@@ -92,7 +110,9 @@ def test_repository_persists_candidate_document_and_chunks(tmp_path: Path) -> No
         sqlite_path=tmp_path / "canonical.db",
         content_dir=content_dir,
     )
-    repository.persist(parsed_cvs=[parsed], chunks_to_store=[chunk])
+    repository.persist(
+        parsed_cvs=[parsed], chunks_to_store=[skill_chunk, education_chunk]
+    )
 
     with repository.engine.begin() as conn:
         stored_candidates = conn.execute(select(candidates)).all()
@@ -109,9 +129,11 @@ def test_repository_persists_candidate_document_and_chunks(tmp_path: Path) -> No
     assert stored_documents[0].source_file == pdf_path.name
     assert stored_documents[0].parsed_markdown == parsed.full_text
     assert stored_documents[0].yaml_path is None
-    assert len(stored_chunks) == 1
-    assert stored_chunks[0].chunk_id == point_id_for_chunk(chunk)
-    assert stored_chunks[0].section_type == "SUMMARY"
+    assert len(stored_chunks) == 2
+    assert {row.chunk_id for row in stored_chunks} == {
+        point_id_for_chunk(skill_chunk),
+        point_id_for_chunk(education_chunk),
+    }
     assert len(stored_skills) == 2
     assert len(stored_education) == 1
     assert len(stored_experience) == 0
@@ -193,7 +215,7 @@ def test_sqlite_lookup_service_resolves_targeted_entities(tmp_path: Path) -> Non
             ParsedPage(page_number=1, markdown="## **SUMMARY**\n\nBackend engineer.")
         ],
     )
-    chunk = Chunk.model_validate(
+    education_chunk = Chunk.model_validate(
         {
             "candidate_name": "Jane Doe",
             "source_file": pdf_path.name,
@@ -211,12 +233,33 @@ def test_sqlite_lookup_service_resolves_targeted_entities(tmp_path: Path) -> Non
             "text": "Backend engineer with Python experience. Education: UPC.",
         }
     )
+    skill_chunk = Chunk.model_validate(
+        {
+            "candidate_name": "Jane Doe",
+            "source_file": pdf_path.name,
+            "document_title": "Jane Doe CV",
+            "page": 1,
+            "chunk_index": 1,
+            "section": "SKILLS",
+            "detected_skills": [],
+            "detected_companies": [],
+            "detected_universities": [],
+            "email_addresses": [],
+            "phone_numbers": [],
+            "linkedin_urls": [],
+            "github_urls": [],
+            "text": "Python",
+        }
+    )
 
     sqlite_path = tmp_path / "canonical.db"
     repository = SQLiteCanonicalRepository(
         sqlite_path=sqlite_path, content_dir=content_dir
     )
-    repository.persist(parsed_cvs=[parsed], chunks_to_store=[chunk])
+    repository.persist(
+        parsed_cvs=[parsed],
+        chunks_to_store=[education_chunk, skill_chunk],
+    )
 
     lookup = SQLiteLookupService(sqlite_path=sqlite_path)
 
