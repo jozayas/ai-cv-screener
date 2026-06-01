@@ -20,9 +20,21 @@
         border-bottom: 1.5px solid #b8c4ce;
         display: grid;
         gap: 1rem;
-        grid-template-columns: 1.15fr 1fr;
+        grid-template-columns: 1.15fr auto;
         margin-bottom: 0.75rem;
         padding-bottom: 0.55rem;
+      }
+      .identity {
+        align-items: center;
+        display: flex;
+        gap: 0.75rem;
+      }
+      .headshot {
+        border: 1px solid #c6d0d8;
+        border-radius: 50%;
+        height: 24mm;
+        object-fit: cover;
+        width: 24mm;
       }
       .header h1 { font-size: 23pt; letter-spacing: 0; margin-bottom: 0.12rem; }
       .subtitle { color: #52616c; font-size: 9.4pt; }
@@ -63,9 +75,12 @@
   <body>
     <main class="resume" data-template-name="{{ template_name }}">
       <header class="header">
-        <div>
+        <div class="identity">
+          {{ macros.render_headshot(profile.photo_path, profile.full_name) }}
+          <div>
           <h1>{{ profile.full_name }}</h1>
           <p class="subtitle">{{ profile.location }}</p>
+          </div>
         </div>
         <p class="contact">{{ profile.email }}<br>{{ profile.phone }}</p>
       </header>

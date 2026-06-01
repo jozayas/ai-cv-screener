@@ -74,6 +74,39 @@ def test_parse_directory_returns_empty_for_empty_directory(tmp_path: Path) -> No
     assert results == []
 
 
+def test_parse_directory_reports_progress(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_dir = tmp_path / "pdfs"
+    pdf_dir.mkdir()
+    pdf_paths = [pdf_dir / f"cv-{idx}.pdf" for idx in range(3)]
+    for path in pdf_paths:
+        path.write_bytes(b"%PDF-1.4")
+
+    def fake_parse_pdf(pdf_path: Path) -> ParsedCV:
+        return ParsedCV.model_validate(
+            {
+                "source_path": pdf_path,
+                "filename": pdf_path.stem,
+                "title": "",
+                "pages": [{"page_number": 1, "markdown": "Sample"}],
+            }
+        )
+
+    monkeypatch.setattr("cv_screener.ingestion.parser.parse_pdf", fake_parse_pdf)
+
+    updates: list[tuple[int, int]] = []
+    results = parse_directory(
+        pdf_dir,
+        progress_callback=lambda current, total: updates.append((current, total)),
+    )
+
+    assert len(results) == 3
+    assert updates[-1] == (3, 3)
+    assert len(updates) == 3
+
+
 def test_parsed_cv_full_text_concatenates_pages(pdf_directory: Path) -> None:
     pdfs = sorted(pdf_directory.glob("*.pdf"))
     parsed = parse_pdf(pdfs[0])

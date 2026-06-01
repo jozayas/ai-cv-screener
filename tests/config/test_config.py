@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from cv_screener.config import LangSmithSettings, QdrantSettings, RAGModelSettings
+from cv_screener.config import (
+    GenerationSettings,
+    ImageGenerationProvider,
+    QdrantSettings,
+    RAGModelSettings,
+)
 from cv_screener.ingestion.indexing.schema import QdrantIndexConfig
 
 
@@ -75,36 +80,38 @@ def test_rag_model_settings_read_from_environment(
     assert settings.rag_max_retries == 4
 
 
-def test_langsmith_settings_default_to_disabled(
+def test_generation_settings_have_guardrail_defaults(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
-    monkeypatch.delenv("LANGSMITH_PROJECT", raising=False)
-    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
-    monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
+    monkeypatch.delenv("GENERATION_MAX_CONCURRENCY", raising=False)
+    monkeypatch.delenv("GENERATION_MIN_INTERVAL_SECONDS", raising=False)
+    monkeypatch.delenv("GENERATION_RETRY_BASE_DELAY_SECONDS", raising=False)
+    monkeypatch.delenv("GENERATION_RETRY_MAX_DELAY_SECONDS", raising=False)
+    monkeypatch.delenv("IMAGE_GENERATION_MAX_CONCURRENCY", raising=False)
+    monkeypatch.delenv("IMAGE_GENERATION_MODEL", raising=False)
+    monkeypatch.delenv("IMAGE_GENERATION_SIZE", raising=False)
     monkeypatch.chdir(tmp_path)
 
-    settings = LangSmithSettings()
+    settings = GenerationSettings()
 
-    assert not settings.langsmith_tracing
-    assert settings.langsmith_project == "cv-screener"
-    assert settings.langsmith_api_key is None
-    assert settings.langsmith_endpoint == "https://api.smith.langchain.com"
+    assert settings.generation_max_concurrency == 2
+    assert settings.generation_min_interval_seconds == pytest.approx(0.35)
+    assert settings.generation_retry_base_delay_seconds == pytest.approx(0.5)
+    assert settings.generation_retry_max_delay_seconds == pytest.approx(8.0)
+    assert settings.image_generation_provider is ImageGenerationProvider.OPENAI
+    assert settings.image_generation_max_concurrency == 1
+    assert settings.image_generation_model == "gpt-image-1"
+    assert settings.image_generation_size == "1024x1024"
+    assert settings.huggingface_api_key is None
 
 
-def test_langsmith_settings_read_from_environment(
+def test_generation_settings_read_huggingface_token_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("LANGSMITH_TRACING", "true")
-    monkeypatch.setenv("LANGSMITH_PROJECT", "cv-screener-demo")
-    monkeypatch.setenv("LANGSMITH_API_KEY", "langsmith-key")
-    monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://smith.internal")
+    monkeypatch.setenv("HF_TOKEN", "hf-secret")
 
-    settings = LangSmithSettings()
+    settings = GenerationSettings()
 
-    assert settings.langsmith_tracing
-    assert settings.langsmith_project == "cv-screener-demo"
-    assert settings.langsmith_api_key is not None
-    assert settings.langsmith_api_key.get_secret_value() == "langsmith-key"
-    assert settings.langsmith_endpoint == "https://smith.internal"
+    assert settings.huggingface_api_key is not None
+    assert settings.huggingface_api_key.get_secret_value() == "hf-secret"

@@ -186,7 +186,9 @@ def test_answer_output_strips_citations_when_abstained() -> None:
     """Before-validator strips citations when abstained=True."""
     result = AnswerOutput(
         answer="No relevant candidates found.",
-        citations=[AnswerCitation(rank=1, source_file="cv.pdf", page=1, section="Skills")],
+        citations=[
+            AnswerCitation(rank=1, source_file="cv.pdf", page=1, section="Skills")
+        ],
         abstained=True,
     )
     assert result.abstained is True
@@ -204,7 +206,9 @@ def test_answer_output_non_abstained_with_citations_works() -> None:
     """Normal non-abstained answers with citations still validate correctly."""
     result = AnswerOutput(
         answer="Ada has Python experience.",
-        citations=[AnswerCitation(rank=1, source_file="ada.pdf", page=2, section="Skills")],
+        citations=[
+            AnswerCitation(rank=1, source_file="ada.pdf", page=2, section="Skills")
+        ],
         abstained=False,
     )
     assert result.abstained is False

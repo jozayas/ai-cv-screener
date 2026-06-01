@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
-    from pathlib import Path
 
     from cv_screener.cli.serve import ChainlitLauncher
     from cv_screener.cv_generation.pdf.templates import TemplateId
+    from cv_screener.cv_generation.photos.service import PhotoGenerationSummary
     from cv_screener.ingestion.schema import IngestionSummary
     from cv_screener.rag.service import RAGQueryResult
     from cv_screener.retrieval.schema import RetrievedChunk
@@ -28,10 +29,28 @@ class PDFRenderingServiceProtocol(Protocol):
         ...
 
 
+class PhotoGenerationServiceProtocol(Protocol):
+    """Behavior needed from the CV photo generation service in CLI commands."""
+
+    def generate_directory(self, directory: Path) -> PhotoGenerationSummary:
+        """Generate photos for every YAML profile in a directory."""
+        ...
+
+    def generate_files(self, paths: list[Path]) -> PhotoGenerationSummary:
+        """Generate photos for the provided YAML CV files."""
+        ...
+
+
 class CVIngestionServiceProtocol(Protocol):
     """Behavior needed from the ingestion service in CLI commands."""
 
-    def ingest(self, *, reset: bool = False) -> IngestionSummary:
+    def ingest(
+        self,
+        *,
+        reset: bool = False,
+        progress_callback: object | None = None,
+        expected_pdf_count: int | None = None,
+    ) -> IngestionSummary:
         """Parse, chunk, and index rendered CV PDFs."""
         ...
 
@@ -52,7 +71,7 @@ class RAGQueryServiceProtocol(Protocol):
         ...
 
     def async_stream(
-        self, query_text: str
+        self, query_text: str, *, conversation_context: str | None = None
     ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         """Yield (node_name, state_update) as each graph node completes."""
         ...
@@ -74,10 +93,30 @@ def build_pdf_rendering_service(
     return cast("PDFRenderingServiceProtocol", service)
 
 
+def build_photo_generation_service(
+    *, photo_dir: Path
+) -> PhotoGenerationServiceProtocol:
+    """Build the photo generation service lazily to keep CLI help fast."""
+    module = import_module("cv_screener.cv_generation.photos.service")
+    service = module.CVPhotoGenerationService(photo_dir=photo_dir)
+    return cast("PhotoGenerationServiceProtocol", service)
+
+
 def build_cv_ingestion_service(*, pdf_dir: Path) -> CVIngestionServiceProtocol:
     """Build the ingestion service lazily to keep CLI import overhead low."""
-    module = import_module("cv_screener.ingestion.ingest")
-    service = module.CVIngestionService(pdf_dir=pdf_dir)
+    ingestion_module = import_module("cv_screener.ingestion.ingest")
+    config_module = import_module("cv_screener.config")
+    persistence_module = import_module("cv_screener.persistence")
+
+    sqlite_settings = config_module.SQLiteSettings()
+    canonical_store = persistence_module.SQLiteCanonicalRepository(
+        sqlite_path=Path(sqlite_settings.sqlite_path),
+        content_dir=Path("data/cvs_contents"),
+    )
+    service = ingestion_module.CVIngestionService(
+        pdf_dir=pdf_dir,
+        canonical_store=canonical_store,
+    )
     return cast("CVIngestionServiceProtocol", service)
 
 
@@ -87,10 +126,15 @@ def build_hybrid_retriever() -> HybridRetrieverProtocol:
     return cast("HybridRetrieverProtocol", module.HybridRetriever())
 
 
-def build_rag_query_service() -> RAGQueryServiceProtocol:
+def build_rag_query_service(
+    *, candidate_name_min_score: float
+) -> RAGQueryServiceProtocol:
     """Build the RAG query service lazily to keep CLI help fast."""
     module = import_module("cv_screener.rag.service")
-    return cast("RAGQueryServiceProtocol", module.RAGQueryService())
+    return cast(
+        "RAGQueryServiceProtocol",
+        module.RAGQueryService(candidate_name_min_score=candidate_name_min_score),
+    )
 
 
 def build_chainlit_launcher() -> ChainlitLauncher:

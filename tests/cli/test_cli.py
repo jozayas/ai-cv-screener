@@ -1,5 +1,6 @@
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -118,6 +119,7 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
         content_dir / "candidate-2.yaml",
     ]
     rendered_paths = [pdf_dir / "candidate-1.pdf", pdf_dir / "candidate-2.pdf"]
+    photo_summary = SimpleNamespace(profile_count=2, generated_count=2, skipped_count=0)
 
     class FakeGenerationService:
         def __init__(
@@ -133,6 +135,18 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
             assert progress_callback is None
             calls.append(("generate", content_dir, None))
             return generated_paths
+
+    def fake_generate_photos(
+        *,
+        ctx: object | None,
+        paths: list[Path],
+        photo_dir: Path,
+    ) -> object:
+        assert ctx is None
+        assert paths == generated_paths
+        assert photo_dir == Path("data/generated/photos")
+        calls.append(("photos", photo_dir, None))
+        return photo_summary
 
     class FakePDFRenderingService:
         def __init__(
@@ -151,6 +165,11 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
             return rendered_paths
 
     monkeypatch.setattr(cli_generation, "CVGenerationService", FakeGenerationService)
+    monkeypatch.setattr(
+        cli_commands,
+        "generate_cv_photo_files",
+        fake_generate_photos,
+    )
     monkeypatch.setattr(
         cli_commands,
         "build_pdf_rendering_service",
@@ -178,13 +197,59 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
     assert calls == [
         ("generate_init", content_dir, None),
         ("generate", content_dir, None),
+        ("photos", Path("data/generated/photos"), None),
         ("render_init", content_dir, pdf_dir),
         ("render_files", content_dir, pdf_dir),
     ]
     assert result.stdout == (
         f"Generated 2 CV YAML files in {content_dir}.\n"
+        f"Prepared 2 CV photos in {Path('data/generated/photos')}.\n"
         f"Rendered 2 CV PDFs in {pdf_dir}.\n"
     )
+
+
+def test_generate_photos_command_generates_for_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    input_dir = tmp_path / "content"
+    photo_dir = tmp_path / "photos"
+    input_dir.mkdir()
+    summary = SimpleNamespace(profile_count=3, generated_count=2, skipped_count=1)
+    calls: list[tuple[str, Path]] = []
+
+    class FakePhotoGenerationService:
+        def __init__(self, *, photo_dir: Path) -> None:
+            calls.append(("init", photo_dir))
+
+        def generate_directory(self, directory: Path) -> object:
+            calls.append(("directory", directory))
+            return summary
+
+        def generate_files(self, _paths: list[Path]) -> object:
+            message = "directory path should use generate_directory"
+            raise AssertionError(message)
+
+    monkeypatch.setattr(
+        cli_commands,
+        "build_photo_generation_service",
+        FakePhotoGenerationService,
+    )
+
+    result = runner.invoke(
+        cli_app,
+        [
+            "--color",
+            "never",
+            "generate-photos",
+            str(input_dir),
+            "--photo-dir",
+            str(photo_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [("init", photo_dir), ("directory", input_dir)]
+    assert result.stdout == (f"Prepared 2 CV photos for 3 YAML files in {input_dir}.\n")
 
 
 def test_render_command_renders_single_yaml_file(
@@ -295,14 +360,23 @@ def test_ingest_command_orchestrates_pdf_ingestion(
 ) -> None:
     pdf_dir = tmp_path / "pdfs"
     pdf_dir.mkdir()
+    (pdf_dir / "candidate-1.pdf").write_bytes(b"%PDF-1.4")
+    (pdf_dir / "candidate-2.pdf").write_bytes(b"%PDF-1.4")
     calls: list[tuple[str, object, object | None]] = []
 
     class FakeIngestionService:
         def __init__(self, *, pdf_dir: Path) -> None:
             calls.append(("ingest_init", pdf_dir, None))
 
-        def ingest(self, *, reset: bool = False) -> object:
-            calls.append(("ingest", reset, None))
+        def ingest(
+            self,
+            *,
+            reset: bool = False,
+            progress_callback: object | None = None,
+            expected_pdf_count: int | None = None,
+        ) -> object:
+            _ = expected_pdf_count
+            calls.append(("ingest", reset, progress_callback))
             return IngestionSummary(pdf_count=2, chunk_count=5, reset=reset)
 
     monkeypatch.setattr(
@@ -310,6 +384,7 @@ def test_ingest_command_orchestrates_pdf_ingestion(
         "build_cv_ingestion_service",
         FakeIngestionService,
     )
+    monkeypatch.setattr(cli_commands, "should_use_progress", lambda **_: False)
 
     result = runner.invoke(
         cli_app,
@@ -331,6 +406,53 @@ def test_ingest_command_orchestrates_pdf_ingestion(
     assert result.stdout == f"Ingested 2 PDFs into 5 chunks from {pdf_dir}.\n"
 
 
+def test_ingest_command_uses_progress_callback_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_dir = tmp_path / "pdfs"
+    pdf_dir.mkdir()
+    (pdf_dir / "candidate-1.pdf").write_bytes(b"%PDF-1.4")
+    (pdf_dir / "candidate-2.pdf").write_bytes(b"%PDF-1.4")
+    captured: dict[str, object | None] = {"callback": None}
+
+    class FakeIngestionService:
+        def __init__(self, *, pdf_dir: Path) -> None:
+            _ = pdf_dir
+
+        def ingest(
+            self,
+            *,
+            reset: bool = False,
+            progress_callback: object | None = None,
+            expected_pdf_count: int | None = None,
+        ) -> object:
+            _ = (reset, expected_pdf_count)
+            captured["callback"] = progress_callback
+            return IngestionSummary(pdf_count=2, chunk_count=5, reset=False)
+
+    monkeypatch.setattr(
+        cli_commands,
+        "build_cv_ingestion_service",
+        FakeIngestionService,
+    )
+    monkeypatch.setattr(cli_commands, "should_use_progress", lambda **_: True)
+
+    result = runner.invoke(
+        cli_app,
+        [
+            "--color",
+            "never",
+            "ingest",
+            "--pdf-dir",
+            str(pdf_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert callable(captured["callback"])
+
+
 def test_query_command_runs_rag_service_and_prints_grounded_answer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -348,7 +470,11 @@ def test_query_command_runs_rag_service_and_prints_grounded_answer(
                 state={"final_text": "unused"},
             )
 
-    monkeypatch.setattr(cli_commands, "build_rag_query_service", FakeRAGQueryService)
+    monkeypatch.setattr(
+        cli_commands,
+        "build_rag_query_service",
+        lambda **_: FakeRAGQueryService(),
+    )
 
     result = runner.invoke(
         cli_app,

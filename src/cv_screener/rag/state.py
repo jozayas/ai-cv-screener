@@ -11,9 +11,11 @@ if TYPE_CHECKING:
     from cv_screener.rag.schema import (
         AnswerOutput,
         BriefAnswerOutput,
+        FullCVOutput,
         PlannerOutput,
         ReviewOutput,
         RouteDecision,
+        TargetedLookupOutput,
     )
     from cv_screener.retrieval.schema import RetrievedChunk
 else:
@@ -21,9 +23,11 @@ else:
     _retrieval_schema = import_module("cv_screener.retrieval.schema")
     AnswerOutput = _rag_models.AnswerOutput
     BriefAnswerOutput = _rag_models.BriefAnswerOutput
+    FullCVOutput = _rag_models.FullCVOutput
     PlannerOutput = _rag_models.PlannerOutput
     ReviewOutput = _rag_models.ReviewOutput
     RouteDecision = _rag_models.RouteDecision
+    TargetedLookupOutput = _rag_models.TargetedLookupOutput
     RetrievedChunk = _retrieval_schema.RetrievedChunk
 
 
@@ -31,8 +35,11 @@ class RAGState(TypedDict, total=False):
     """Shared state passed between RAG graph nodes."""
 
     user_query: str
+    conversation_context: str
     route: RouteDecision
     brief_answer: BriefAnswerOutput
+    targeted_lookup: TargetedLookupOutput
+    full_cv: FullCVOutput
     planner: PlannerOutput
     retrieved_chunks: list[RetrievedChunk]
     reranked_chunks: list[RetrievedChunk]

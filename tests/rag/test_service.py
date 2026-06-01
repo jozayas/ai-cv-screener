@@ -13,7 +13,12 @@ from cv_screener.rag.schema import (
 )
 from cv_screener.rag.service import RAGQueryService
 from cv_screener.retrieval.schema import RetrievedChunk
-from tests.rag.test_graph import FakeReranker, FakeRetriever, make_runnable
+from tests.rag.test_graph import (
+    FakeLookupService,
+    FakeReranker,
+    FakeRetriever,
+    make_runnable,
+)
 
 
 def test_rag_query_service_returns_final_graph_output() -> None:
@@ -39,6 +44,7 @@ def test_rag_query_service_returns_final_graph_output() -> None:
                 PlannerOutput(primary_query="python backend engineer")
             ),
             brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+            lookup_service=FakeLookupService(),
             retriever=FakeRetriever([chunk]),
             reranker=FakeReranker([chunk]),
             answer_model=make_runnable(
@@ -97,6 +103,7 @@ def test_rag_query_service_async_stream_yields_per_node_events() -> None:
                 PlannerOutput(primary_query="python backend engineer")
             ),
             brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+            lookup_service=FakeLookupService(),
             retriever=FakeRetriever([chunk]),
             reranker=FakeReranker([chunk]),
             answer_model=make_runnable(
@@ -125,7 +132,7 @@ def test_rag_query_service_async_stream_yields_per_node_events() -> None:
     async def _collect() -> list[tuple[str, dict[str, object]]]:
         result: list[tuple[str, dict[str, object]]] = []
         async for node_name, state_update in service.async_stream(
-            "Who has Python experience?"
+            "Who has Python backend experience?"
         ):
             result.append((node_name, state_update))
         return result

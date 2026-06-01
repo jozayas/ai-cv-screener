@@ -29,6 +29,24 @@ class _ChunkProvenance:
     document_title: str
 
 
+@dataclass(frozen=True)
+class _ChunkingRuntime:
+    classifier: SectionClassifier
+    metadata_extractor: MetadataExtractor
+    semantic_chunker: SemanticChunker
+
+
+def _build_runtime(config: ChunkConfig) -> _ChunkingRuntime:
+    classifier = SectionClassifier(config)
+    metadata_extractor = MetadataExtractor(config)
+    semantic_chunker = SemanticChunker(config, classifier.model)
+    return _ChunkingRuntime(
+        classifier=classifier,
+        metadata_extractor=metadata_extractor,
+        semantic_chunker=semantic_chunker,
+    )
+
+
 def _build_chunk(
     *,
     context: _ChunkBuildContext,
@@ -94,17 +112,20 @@ def _build_section_chunks(
     return chunks
 
 
-def chunk_cv(cv: ParsedCV, config: ChunkConfig | None = None) -> list[Chunk]:
+def chunk_cv(
+    cv: ParsedCV,
+    config: ChunkConfig | None = None,
+    *,
+    runtime: _ChunkingRuntime | None = None,
+) -> list[Chunk]:
     """Split a parsed CV into retrieval-ready semantic chunks."""
     resolved_config = config or ChunkConfig()
-    classifier = SectionClassifier(resolved_config)
-    metadata_extractor = MetadataExtractor(resolved_config)
-    semantic_chunker = SemanticChunker(resolved_config, classifier.model)
+    resolved_runtime = runtime or _build_runtime(resolved_config)
     context = _ChunkBuildContext(
         cv=cv,
         provenance=_build_provenance(cv),
-        candidate_name=metadata_extractor.candidate_name(cv),
-        metadata_extractor=metadata_extractor,
+        candidate_name=resolved_runtime.metadata_extractor.candidate_name(cv),
+        metadata_extractor=resolved_runtime.metadata_extractor,
     )
     chunks: list[Chunk] = []
     next_chunk_index = 0
@@ -112,7 +133,10 @@ def chunk_cv(cv: ParsedCV, config: ChunkConfig | None = None) -> list[Chunk]:
     for page in cv.pages:
         page_by_section: dict[str, list[str]] = {}
         for doc in MARKDOWN_SPLITTER.split_text(page.markdown):
-            section = resolve_section(doc.metadata.get("section", ""), classifier)
+            section = resolve_section(
+                doc.metadata.get("section", ""),
+                resolved_runtime.classifier,
+            )
             page_by_section.setdefault(section, []).append(doc.page_content.strip())
 
         for section, texts in page_by_section.items():
@@ -124,7 +148,7 @@ def chunk_cv(cv: ParsedCV, config: ChunkConfig | None = None) -> list[Chunk]:
                     section=section,
                     texts=texts,
                 ),
-                semantic_chunker=semantic_chunker,
+                semantic_chunker=resolved_runtime.semantic_chunker,
             )
             chunks.extend(section_chunks)
             next_chunk_index += len(section_chunks)
@@ -141,6 +165,9 @@ def chunk_cv(cv: ParsedCV, config: ChunkConfig | None = None) -> list[Chunk]:
 def chunk_cvs(cvs: list[ParsedCV], config: ChunkConfig | None = None) -> list[Chunk]:
     """Split multiple parsed CVs into section-aware chunks."""
     resolved_config = config or ChunkConfig()
-    all_chunks = [chunk for cv in cvs for chunk in chunk_cv(cv, config=resolved_config)]
-    logger.info("Chunked all CVs", total_cvs=len(cvs), total_chunks=len(all_chunks))
-    return all_chunks
+    runtime = _build_runtime(resolved_config)
+    return [
+        chunk
+        for cv in cvs
+        for chunk in chunk_cv(cv, config=resolved_config, runtime=runtime)
+    ]

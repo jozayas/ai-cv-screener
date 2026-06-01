@@ -1,0 +1,1 @@
+"""CV photo generation helpers."""

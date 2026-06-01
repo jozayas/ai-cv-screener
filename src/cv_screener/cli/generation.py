@@ -7,12 +7,14 @@ from typing import cast
 import typer
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
+from cv_screener.cli.dependencies import build_photo_generation_service
 from cv_screener.cli.runtime import init_command, should_use_progress
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     CVProfileSource,
     GenerationMode,
 )
+from cv_screener.cv_generation.photos.service import PhotoGenerationSummary
 
 
 def generate_cv_content_files(
@@ -61,3 +63,15 @@ def build_profile_source(mode: GenerationMode) -> CVProfileSource:
 
     source = sources_module.SeededCVProfileSource()
     return cast("CVProfileSource", source)
+
+
+def generate_cv_photo_files(
+    *,
+    ctx: typer.Context | None,
+    paths: list[Path],
+    photo_dir: Path,
+) -> PhotoGenerationSummary:
+    """Generate or refresh CV photos for a set of YAML profiles."""
+    _ = ctx
+    service = build_photo_generation_service(photo_dir=photo_dir)
+    return service.generate_files(paths)

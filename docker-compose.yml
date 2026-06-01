@@ -1,4 +1,12 @@
 services:
+  sqlite-init:
+    image: alpine:3.22
+    container_name: cv-screener-sqlite-init
+    command: ["/bin/sh", "-c", "mkdir -p /data && touch /data/cv_screener.db"]
+    volumes:
+      - sqlite_data:/data
+    restart: "no"
+
   qdrant:
     image: qdrant/qdrant:v1.18.1
     container_name: cv-screener-qdrant
@@ -37,5 +45,6 @@ services:
         ollama pull ${GENERATION_MODEL:-gemma3:12b}
 
 volumes:
+  sqlite_data:
   qdrant_data:
   ollama_data:

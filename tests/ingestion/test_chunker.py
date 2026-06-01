@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from fastembed import TextEmbedding
 from pydantic import ValidationError
 
 from cv_screener.ingestion.chunking import chunker
@@ -153,6 +154,31 @@ def test_chunk_cv_bold_and_plain_headings() -> None:
     assert "EXPERIENCE" in sections
 
 
+def test_chunk_cv_uses_classifier_output_as_canonical_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_classifier = chunker.SectionClassifier
+
+    class CanonicalizingSectionClassifier(original_classifier):
+        def classify(self, raw_section: str) -> str:
+            if "professional experience" in raw_section.casefold():
+                return "EXPERIENCE"
+            return super().classify(raw_section)
+
+    monkeypatch.setattr(
+        chunker,
+        "SectionClassifier",
+        CanonicalizingSectionClassifier,
+    )
+
+    cv = _make_cv("## Professional Experience\n\nBuilt APIs.")
+
+    chunks = chunker.chunk_cv(cv)
+
+    assert len(chunks) == 1
+    assert chunks[0].section == "EXPERIENCE"
+
+
 def test_chunk_cvs_processes_multiple() -> None:
     cv1 = _make_cv("## **SUMMARY**\n\nEngineer one.", "engineer-one")
     cv2 = _make_cv("## **SUMMARY**\n\nEngineer two.", "engineer-two")
@@ -161,6 +187,41 @@ def test_chunk_cvs_processes_multiple() -> None:
     assert len(chunks) == 2
     assert chunks[0].source_file == "engineer-one.pdf"
     assert chunks[1].source_file == "engineer-two.pdf"
+
+
+def test_chunk_cvs_reuses_runtime_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cv1 = _make_cv("## **SUMMARY**\n\nEngineer one.", "engineer-one")
+    cv2 = _make_cv("## **SUMMARY**\n\nEngineer two.", "engineer-two")
+    calls = {"classifier": 0, "metadata": 0, "semantic": 0}
+
+    original_classifier = chunker.SectionClassifier
+    original_metadata = chunker.MetadataExtractor
+    original_semantic = chunker.SemanticChunker
+
+    class CountingSectionClassifier(original_classifier):
+        def __init__(self, config: ChunkConfig) -> None:
+            calls["classifier"] += 1
+            super().__init__(config)
+
+    class CountingMetadataExtractor(original_metadata):
+        def __init__(self, config: ChunkConfig) -> None:
+            calls["metadata"] += 1
+            super().__init__(config)
+
+    class CountingSemanticChunker(original_semantic):
+        def __init__(self, config: ChunkConfig, model: TextEmbedding) -> None:
+            calls["semantic"] += 1
+            super().__init__(config, model)
+
+    monkeypatch.setattr(chunker, "SectionClassifier", CountingSectionClassifier)
+    monkeypatch.setattr(chunker, "MetadataExtractor", CountingMetadataExtractor)
+    monkeypatch.setattr(chunker, "SemanticChunker", CountingSemanticChunker)
+
+    _ = chunker.chunk_cvs([cv1, cv2])
+
+    assert calls == {"classifier": 1, "metadata": 1, "semantic": 1}
 
 
 def test_chunk_preserves_multi_page() -> None:
