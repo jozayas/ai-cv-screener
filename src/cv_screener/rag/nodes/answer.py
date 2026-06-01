@@ -80,16 +80,15 @@ def _build_messages(
 
 def _build_user_prompt(user_query: str, chunks: list[RetrievedChunk]) -> str:
     context_blocks = []
-    for index, chunk in enumerate(chunks, start=1):
-        context_blocks.append(
-            "\n".join(
-                [
-                    f"Chunk {index}",
-                    f"source_file: {chunk.source_file}",
-                    f"page: {chunk.page}",
-                    f"section: {chunk.section}",
-                    f"text: {chunk.text}",
-                ]
-            )
-        )
+    for chunk in chunks:
+        lines = [
+            f"source_file: {chunk.source_file}",
+            f"page: {chunk.page}",
+            f"section: {chunk.section}",
+            f"rank: {chunk.rank}",
+        ]
+        if chunk.candidate_name:
+            lines.append(f"candidate_name: {chunk.candidate_name}")
+        lines.append(f"text: {chunk.text}")
+        context_blocks.append("\n".join(lines))
     return "\n\n".join([f"User question: {user_query}", "Context:", *context_blocks])

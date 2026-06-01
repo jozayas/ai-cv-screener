@@ -21,18 +21,20 @@ from cv_screener.rag.schema import (
     BriefAnswerOutput,
     PlannerOutput,
     ReviewOutput,
+    ReviewVerdict,
     RouteDecision,
 )
 from cv_screener.rag.state import RAGState
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable
     from langgraph.graph.state import CompiledStateGraph
     from langgraph.runtime import Runtime
 
     from cv_screener.rag.nodes.retrieve import RetrieverProtocol
-    from cv_screener.retrieval.schema import RetrievedChunk
 
 
 class CompiledRAGGraph(Protocol):
@@ -40,6 +42,16 @@ class CompiledRAGGraph(Protocol):
 
     def invoke(self, state: RAGState, *, context: GraphDependencies) -> RAGState:
         """Run the graph to completion for a single state input."""
+        ...
+
+    def astream(
+        self,
+        state: RAGState,
+        *,
+        context: GraphDependencies | None = None,
+        stream_mode: str | None = "updates",
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream per-node updates from the graph."""
         ...
 
 
@@ -75,73 +87,100 @@ def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
     _ = graph.add_edge("retrieve", "rerank")
     _ = graph.add_edge("rerank", "answer")
     _ = graph.add_edge("answer", "review")
-    _ = graph.add_edge("review", "finalize")
+    _ = graph.add_conditional_edges("review", _next_node_after_review)
     _ = graph.add_edge("finalize", END)
 
     return graph.compile()
 
 
+def _executed(state: RAGState, name: str) -> list[str]:
+    """Append a node name to the execution trace."""
+    return [*state.get("nodes_executed", []), name]
+
+
 def router_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
-) -> dict[str, RouteDecision]:
+) -> dict[str, object]:
     """Graph adapter for the router node."""
-    return router_node(
-        state,
-        config=get_config(),
-        model=runtime.context.router_model,
+    return cast(
+        "dict[str, object]",
+        {
+            **router_node(state, config=get_config(), model=runtime.context.router_model),
+            "nodes_executed": _executed(state, "router"),
+        },
     )
 
 
 def brief_answer_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
-) -> dict[str, BriefAnswerOutput]:
+) -> dict[str, object]:
     """Graph adapter for the brief-answer node."""
-    return brief_answer_node(
-        state,
-        config=get_config(),
-        model=runtime.context.brief_answer_model,
+    return cast(
+        "dict[str, object]",
+        {
+            **brief_answer_node(
+                state, config=get_config(), model=runtime.context.brief_answer_model
+            ),
+            "nodes_executed": _executed(state, "brief_answer"),
+        },
     )
 
 
 def planner_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
-) -> dict[str, PlannerOutput]:
+) -> dict[str, object]:
     """Graph adapter for the planner node."""
-    return planner_node(
-        state,
-        config=get_config(),
-        model=runtime.context.planner_model,
+    return cast(
+        "dict[str, object]",
+        {
+            **planner_node(state, config=get_config(), model=runtime.context.planner_model),
+            "nodes_executed": _executed(state, "planner"),
+        },
     )
 
 
 def retrieve_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
-) -> dict[str, list[RetrievedChunk]]:
+) -> dict[str, object]:
     """Graph adapter for the retrieval node."""
-    return retrieve_state_node(state, retriever=runtime.context.retriever)
+    return cast(
+        "dict[str, object]",
+        {
+            **retrieve_state_node(state, retriever=runtime.context.retriever),
+            "nodes_executed": _executed(state, "retrieve"),
+        },
+    )
 
 
 def rerank_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
-) -> dict[str, list[RetrievedChunk]]:
+) -> dict[str, object]:
     """Graph adapter for the rerank node."""
-    return reranker_node(state, reranker=runtime.context.reranker)
+    return cast(
+        "dict[str, object]",
+        {
+            **reranker_node(state, reranker=runtime.context.reranker),
+            "nodes_executed": _executed(state, "rerank"),
+        },
+    )
 
 
 def answer_graph_node(
     state: RAGState,
     runtime: Runtime[GraphDependencies],
-) -> dict[str, AnswerOutput]:
+) -> dict[str, object]:
     """Graph adapter for the grounded answer node."""
-    return answerer_node(
-        state,
-        config=get_config(),
-        model=runtime.context.answer_model,
+    return cast(
+        "dict[str, object]",
+        {
+            **answerer_node(state, config=get_config(), model=runtime.context.answer_model),
+            "nodes_executed": _executed(state, "answer"),
+        },
     )
 
 
@@ -150,11 +189,9 @@ def review_graph_node(
     runtime: Runtime[GraphDependencies],
 ) -> dict[str, object]:
     """Graph adapter for the groundedness review node."""
-    return reviewer_node(
-        state,
-        config=get_config(),
-        model=runtime.context.reviewer_model,
-    )
+    result = reviewer_node(state, config=get_config(), model=runtime.context.reviewer_model)
+    result["nodes_executed"] = _executed(state, "review")
+    return result
 
 
 def _next_node_from_state(state: RAGState) -> Literal["brief_answer", "planner"]:
@@ -163,3 +200,13 @@ def _next_node_from_state(state: RAGState) -> Literal["brief_answer", "planner"]
         msg = "router state must include a route decision"
         raise TypeError(msg)
     return next_node_for_route(route)
+
+
+def _next_node_after_review(state: RAGState) -> Literal["review", "finalize"]:
+    review = state.get("review")
+    if not isinstance(review, ReviewOutput):
+        msg = "review state must include review output"
+        raise TypeError(msg)
+    if review.verdict is ReviewVerdict.REVISE:
+        return "review"
+    return "finalize"

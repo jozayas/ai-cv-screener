@@ -24,9 +24,26 @@ def retrieve_node(
     *,
     retriever: RetrieverProtocol,
 ) -> dict[str, list[RetrievedChunk]]:
-    """Fetch retrieved chunks for the planner's primary query."""
+    """Fetch retrieved chunks for the planner's primary query and alternate queries."""
     planner = state.get("planner")
     if not isinstance(planner, PlannerOutput):
         msg = "retrieval state must include planner output"
         raise TypeError(msg)
-    return {"retrieved_chunks": retriever.retrieve(planner.primary_query)}
+
+    queries = [planner.primary_query, *planner.alternate_queries]
+    all_chunks: list[RetrievedChunk] = []
+    for query in queries:
+        all_chunks.extend(retriever.retrieve(query))
+
+    seen: set[tuple[str, int, str]] = set()
+    merged: list[RetrievedChunk] = []
+    for chunk in sorted(all_chunks, key=lambda c: c.score, reverse=True):
+        key = (chunk.source_file, chunk.page, chunk.section)
+        if key not in seen:
+            seen.add(key)
+            merged.append(chunk)
+
+    for rank, chunk in enumerate(merged, start=1):
+        chunk.rank = rank
+
+    return {"retrieved_chunks": merged}

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
     from pathlib import Path
 
+    from cv_screener.cli.serve import ChainlitLauncher
     from cv_screener.cv_generation.pdf.templates import TemplateId
     from cv_screener.ingestion.schema import IngestionSummary
     from cv_screener.rag.service import RAGQueryResult
@@ -49,6 +51,12 @@ class RAGQueryServiceProtocol(Protocol):
         """Return the final RAG response for the given query."""
         ...
 
+    def async_stream(
+        self, query_text: str
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Yield (node_name, state_update) as each graph node completes."""
+        ...
+
 
 def build_pdf_rendering_service(
     *,
@@ -83,3 +91,9 @@ def build_rag_query_service() -> RAGQueryServiceProtocol:
     """Build the RAG query service lazily to keep CLI help fast."""
     module = import_module("cv_screener.rag.service")
     return cast("RAGQueryServiceProtocol", module.RAGQueryService())
+
+
+def build_chainlit_launcher() -> ChainlitLauncher:
+    """Build the Chainlit launcher lazily to keep CLI help fast."""
+    module = import_module("cv_screener.cli.serve")
+    return cast("ChainlitLauncher", module.ChainlitLauncher())

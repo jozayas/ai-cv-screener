@@ -68,6 +68,7 @@ def test_reviewer_node_revises_answer_once() -> None:
         answer="Ada Lovelace led the platform team and built Python APIs.",
         citations=[
             AnswerCitation(
+                rank=1,
                 source_file="ada.pdf",
                 page=2,
                 section="Experience",
@@ -116,6 +117,7 @@ def test_reviewer_node_abstains_when_citation_does_not_match_chunks() -> None:
                 answer="Ada Lovelace has Python experience.",
                 citations=[
                     AnswerCitation(
+                        rank=1,
                         source_file="ada.pdf",
                         page=4,
                         section="Projects",
@@ -168,7 +170,7 @@ def test_reviewer_build_model_parses_json_without_tool_calling(
         AnswerOutput(
             answer="Ada Lovelace has Python experience.",
             citations=[
-                AnswerCitation(source_file="ada.pdf", page=2, section="Experience")
+                AnswerCitation(rank=1, source_file="ada.pdf", page=2, section="Experience")
             ],
         ),
         [

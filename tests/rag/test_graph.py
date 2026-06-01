@@ -48,6 +48,18 @@ def make_runnable[T](response: T) -> Runnable[LanguageModelInput, T]:
     return cast("Runnable[LanguageModelInput, T]", RunnableLambda(lambda _: response))
 
 
+def make_sequence_runnable[T](responses: list[T]) -> Runnable[LanguageModelInput, T]:
+    remaining = list(responses)
+
+    def invoke(_: object) -> T:
+        if not remaining:
+            msg = "No responses remaining for sequence runnable"
+            raise AssertionError(msg)
+        return remaining.pop(0)
+
+    return cast("Runnable[LanguageModelInput, T]", RunnableLambda(invoke))
+
+
 def test_graph_bypasses_planner_and_retrieval_for_small_talk() -> None:
     retriever = FakeRetriever(
         [
@@ -81,6 +93,7 @@ def test_graph_bypasses_planner_and_retrieval_for_small_talk() -> None:
                 answer="unused",
                 citations=[
                     AnswerCitation(
+                        rank=1,
                         source_file="ignored.pdf",
                         page=1,
                         section="Summary",
@@ -155,6 +168,8 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
                 answer="Ada Lovelace has Python backend experience.",
                 citations=[
                     AnswerCitation(
+                        rank=2,
+                        candidate_name="Ada Lovelace",
                         source_file="ada-lovelace.pdf",
                         page=2,
                         section="Experience",
@@ -182,12 +197,36 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
     assert route.route is RouteTarget.CV_QUERY
     assert planner is not None
     assert planner.primary_query == "python backend engineer"
-    assert result.get("retrieved_chunks") == retrieved_chunks
+    merged_chunks = [
+        RetrievedChunk(
+            candidate_name="Grace Hopper",
+            source_file="grace-hopper.pdf",
+            document_title="Grace Hopper CV",
+            page=3,
+            section="Experience",
+            text="Led compiler modernization initiatives.",
+            score=0.81,
+            rank=1,
+        ),
+        RetrievedChunk(
+            candidate_name="Ada Lovelace",
+            source_file="ada-lovelace.pdf",
+            document_title="Ada Lovelace CV",
+            page=2,
+            section="Experience",
+            text="Built Python data pipelines and internal APIs.",
+            score=0.72,
+            rank=2,
+        ),
+    ]
+    assert result.get("retrieved_chunks") == merged_chunks
     assert result.get("reranked_chunks") == reranked_chunks
     assert result.get("answer") == AnswerOutput(
         answer="Ada Lovelace has Python backend experience.",
         citations=[
             AnswerCitation(
+                rank=2,
+                candidate_name="Ada Lovelace",
                 source_file="ada-lovelace.pdf",
                 page=2,
                 section="Experience",
@@ -201,7 +240,100 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
     assert result.get("final_text") == (
         "Ada Lovelace has Python backend experience.\n\n"
         "Sources:\n"
-        "- ada-lovelace.pdf (page 2, Experience)"
+        "[2] Ada Lovelace - ada-lovelace.pdf (page 2, Experience)"
     )
-    assert retriever.queries == ["python backend engineer"]
-    assert reranker.calls == [("python backend engineer", retrieved_chunks, None)]
+    assert retriever.queries == [
+        "python backend engineer",
+        "python api engineer",
+    ]
+    assert reranker.calls == [
+        ("python backend engineer", merged_chunks, None)
+    ]
+
+
+def test_graph_retries_review_once_after_revise_verdict() -> None:
+    retrieved_chunk = RetrievedChunk(
+        candidate_name="Ada Lovelace",
+        source_file="ada-lovelace.pdf",
+        document_title="Ada Lovelace CV",
+        page=2,
+        section="Experience",
+        text="Built Python APIs for internal platforms.",
+        score=0.92,
+        rank=1,
+    )
+    retriever = FakeRetriever([retrieved_chunk])
+    reranker = FakeReranker([retrieved_chunk])
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.CV_QUERY,
+                reasoning="The user is asking about candidate skills.",
+            )
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="python api engineer")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        retriever=retriever,
+        reranker=reranker,
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="Ada Lovelace led platform strategy and built Python APIs.",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        candidate_name="Ada Lovelace",
+                        source_file="ada-lovelace.pdf",
+                        page=2,
+                        section="Experience",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_sequence_runnable(
+            [
+                ReviewOutput(
+                    verdict=ReviewVerdict.REVISE,
+                    reasoning="The chunk supports Python APIs but not platform strategy.",
+                    revised_answer="Ada Lovelace built Python APIs.",
+                ),
+                ReviewOutput(
+                    verdict=ReviewVerdict.APPROVE,
+                    reasoning="The revised answer is grounded in the cited evidence.",
+                ),
+            ]
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke(
+        {"user_query": "Who has Python API experience?"},
+        context=dependencies,
+    )
+
+    assert result.get("answer") == AnswerOutput(
+        answer="Ada Lovelace built Python APIs.",
+        citations=[
+            AnswerCitation(
+                rank=1,
+                candidate_name="Ada Lovelace",
+                source_file="ada-lovelace.pdf",
+                page=2,
+                section="Experience",
+            )
+        ],
+    )
+    assert result.get("review") == ReviewOutput(
+        verdict=ReviewVerdict.APPROVE,
+        reasoning="The revised answer is grounded in the cited evidence.",
+    )
+    assert result.get("review_attempts") == 1
+    assert result.get("nodes_executed") == [
+        "router",
+        "planner",
+        "retrieve",
+        "rerank",
+        "answer",
+        "review",
+        "review",
+        "finalize",
+    ]

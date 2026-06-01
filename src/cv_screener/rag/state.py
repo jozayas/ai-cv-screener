@@ -40,3 +40,4 @@ class RAGState(TypedDict, total=False):
     review: ReviewOutput
     final_text: str
     review_attempts: int
+    nodes_executed: list[str]
