@@ -1,16 +1,101 @@
 [project]
 name = "cv-screener"
-version = "0.1.0"
+version = "1.0.0"
 description = "Local-first prototype for screening fake CVs with a hybrid RAG pipeline."
 readme = "README.md"
 authors = [
     { name = "jozayas", email = "147546369+jozayas@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "chainlit>=2.11.1",
+    "email-validator>=2.3.0",
+    "fastembed>=0.8.0",
+    "gliner>=0.2.26",
+    "jinja2>=3.1.6",
+    "langchain-core>=1.4.0",
+    "langchain-openai>=1.2.2",
+    "langchain-text-splitters>=1.1.2",
+    "langgraph>=1.2.2",
+    "loguru>=0.7.3",
+    "openai>=2.38.0",
+    "phonenumbers>=9.0.31",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "pymupdf4llm>=1.27.2.3",
+    "pyyaml>=6.0.3",
+    "qdrant-client>=1.18.0",
+    "rapidfuzz>=3.14.5",
+    "rich>=15.0.0",
+    "sqlalchemy>=2.0.44",
+    "sentence-transformers>=5.5.1",
+    "typer>=0.26.4",
+    "weasyprint>=68.1",
+    "anyio>=4.13.0",
+]
 
 [project.scripts]
 cv-screener = "cv_screener:main"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.6",
+    "pre-commit>=4.6.0",
+    "pyrefly>=1.0.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.15",
+]
+
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+search-path = ["src", "."]
+python-version = "3.12"
+python-platform = "linux"
+use-ignore-files = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["ALL"]
+fixable = ["ALL"]
+ignore = [
+    "COM812",
+    "COM819",
+    "D203",
+    "D206",
+    "D213",
+    "D300",
+    "E111",
+    "E114",
+    "E117",
+    "E501",
+    "ISC002",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "Q004",
+    "TRY003",
+    "W191",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "PLR2004", "S101"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that exercise live local services",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]

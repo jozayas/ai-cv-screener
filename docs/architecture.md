@@ -1,217 +1,109 @@
-# Architecture
+# Architecture Notes
 
-## Overview
+The repo is organized around a simple local-first CV screening flow.
 
-This project is a local-first AI-powered CV screener.
+## Main Parts
 
-It generates fake CVs, renders them as PDFs, parses those PDFs, indexes their contents, and allows users to ask grounded questions about the candidates through a chat UI.
+- `src/cv_screener/cv_generation`
+  Generates structured fake CV content, optional synthetic photos, and rendered PDF CVs.
 
-## Pipeline
+- `src/cv_screener/ingestion`
+  Parses rendered PDFs, extracts structured text, chunks it, and prepares indexable records.
 
-```txt
-YAML CV generation
-  → Pydantic validation
-  → HTML template rendering
-  → PDF generation
-  → PDF parsing
-  → section-aware chunking
-  → semantic chunking
-  → Qdrant vector indexing
-  → BM25 keyword indexing
-  → hybrid retrieval
-  → reranking
-  → grounded answer generation
-  → Chainlit UI
-```
+- `src/cv_screener/retrieval`
+  Runs hybrid retrieval with semantic search in Qdrant and keyword search through BM25-style sparse vectors.
 
-## Main Components
+- `src/cv_screener/rag`
+  Runs the question-answering graph, including routing, planning, retrieval, reranking, answer generation, and review.
 
-### 1. CV Generation
+- `src/cv_screener/chainlit`
+  Thin UI layer for chat interactions.
 
-CVs are generated as YAML files first.
+- `src/cv_screener/cli`
+  Thin command surface for the end-to-end workflow.
 
-The YAML files are the structured source of truth for:
+## Runtime Shape
 
-* validation
-* PDF rendering
-* evaluation ground truth
-* reproducibility
-
-The generator uses an OpenAI-compatible model interface, so the same code path can work with:
-
-* Ollama
-* OpenRouter
-* Gemini through an OpenAI-compatible proxy
-* OpenAI-compatible local or hosted models
-
-### 2. PDF Rendering
-
-Validated YAML profiles are rendered into HTML using Jinja2 templates.
-
-The HTML is then exported to PDF.
-
-The rendered PDFs are the documents ingested by the RAG pipeline.
-
-### 3. PDF Parsing
-
-PDFs are parsed with PyMuPDF.
-
-The parser extracts:
-
-* text
-* page numbers
-* candidate filename
-* detected sections where possible
-
-The RAG pipeline uses parsed PDF text, not the YAML files directly. This keeps the document-processing workflow realistic.
-
-### 4. Chunking
-
-Chunking is section-aware first.
-
-For example:
-
-* Summary
-* Experience
-* Skills
-* Education
-* Languages
-* Projects
-* Certifications
-
-Large sections may then be split using semantic chunking.
-
-This preserves CV structure while keeping chunks small enough for accurate retrieval.
-
-### 5. Indexing
-
-The system builds two indexes:
+At a high level:
 
 ```txt
-Qdrant index:
-  semantic vector search
-
-BM25 index:
-  keyword and exact-term search
+user question
+  -> router
+     -> brief_answer
+     -> return_cv
+     -> targeted_lookup
+     -> planner
 ```
 
-Each chunk stores metadata:
+The router now has four meaningful runtime branches:
 
-* candidate name
-* source filename
-* page number
-* section
-* chunk id
-* source text
+1. `small_talk` / `needs_clarification`
+   - `router -> brief_answer -> finalize`
 
-### 6. Hybrid Retrieval
+2. Explicit CV requests
+   - examples: `Give me the CV of Alejandro García Martínez`
+   - path: `router -> return_cv -> finalize`
+   - behavior: bypass retrieval and return the resolved CV document directly
 
-Hybrid retrieval is mandatory.
+3. Deterministic targeted lookup requests
+   - examples: `Who knows Python?`, `Who has Python experience?`, `Summarize the profile of Alejandro García Martínez`
+   - path starts at `router -> targeted_lookup`
+   - three sub-paths exist:
+     - clarification: `targeted_lookup -> finalize`
+     - candidate list: `targeted_lookup -> hydrate -> finalize`
+     - named profile summary: `targeted_lookup -> return_profile_cv -> profile_context -> answer -> review -> finalize`
 
-The retrieval flow is:
+4. General recruiter-style CV queries
+   - examples: `Who has Python backend experience?`
+   - path: `router -> planner -> retrieve -> rerank -> answer -> review -> finalize`
+
+## Deterministic Lookup Behavior
+
+The targeted lookup layer is SQLite-first and now behaves as follows:
+
+- named profile requests do not fall back to semantic retrieval
+- a single matched candidate resolves to the candidate CV document first
+- zero matches returns a clarification prompt asking for the full name
+- multiple matches returns a clarification prompt with the matched full names
+- simple skill queries return every matching candidate once, with deduped evidence in the final response
+
+## Profile Summary Path
+
+Named profile summaries now use the candidate CV as the source of truth:
 
 ```txt
-user query
-  → semantic search in Qdrant
-  → BM25 keyword search
-  → fusion
-  → reranking
-  → final context
+Summarize the profile of <candidate>
+  -> targeted_lookup
+  -> return_profile_cv
+  -> profile_context
+  -> answer
+  -> review
+  -> finalize
 ```
 
-Semantic search is useful for broad questions such as:
+Implementation detail:
 
-```txt
-Who is the best candidate for an AI backend role?
-```
+- `return_profile_cv` resolves the matched document through the same canonical lookup used by direct CV requests
+- `profile_context` converts the resolved parsed CV markdown into a single answer-context chunk
+- this path skips hybrid retrieval and reranking entirely
 
-BM25 is useful for exact terms such as:
+This change was introduced because the prior targeted profile path depended on chunk hydration and could abstain even when direct document lookup already worked.
 
-```txt
-Python
-Kubernetes
-German
-UPC
-AWS
-FastAPI
-```
+The implementation is local-first:
 
-Fusion combines both result sets. Reciprocal Rank Fusion is the preferred first implementation.
+- local files for generated inputs and outputs
+- local SQLite for canonical persistence
+- local Qdrant for retrieval
+- local Ollama by default for OpenAI-compatible model access
 
-### 7. Reranking
+## Scope Boundary
 
-The fused results are reranked before answer generation.
+This repo currently supports the core local workflow:
 
-The reranker receives:
+- generate content
+- render PDFs
+- ingest documents
+- query via CLI
+- query via Chainlit UI
 
-* user query
-* candidate chunks
-
-It returns the most relevant chunks for final context construction.
-
-Preferred first implementation:
-
-```txt
-sentence-transformers CrossEncoder
-```
-
-### 8. Answer Generation
-
-The answer generator uses an OpenAI-compatible chat model.
-
-The prompt must enforce:
-
-* answer only from retrieved context
-* do not invent facts
-* include sources
-* say when there is not enough information
-* keep answers concise
-
-Expected answer format:
-
-```txt
-Answer:
-...
-
-Sources:
-- filename.pdf, page 1, Section
-- another_file.pdf, page 2, Section
-```
-
-### 9. Chainlit UI
-
-Chainlit provides the chat interface.
-
-The UI should show:
-
-* user question
-* generated answer
-* source citations
-* optionally retrieved chunks or debug information
-
-A custom frontend is intentionally deferred until the RAG pipeline is working.
-
-## Deployment
-
-Docker Compose is the primary local deployment method.
-
-Expected services:
-
-```txt
-app
-qdrant
-ollama
-optional litellm
-```
-
-Helm is optional and should only be added after the local workflow is complete.
-
-## Design Principles
-
-* Local-first
-* OpenAI-compatible model access
-* Small, reviewable features
-* Explicit retrieval pipeline
-* Source-grounded answers
-* Deterministic evaluation where possible
-* Avoid unnecessary production infrastructure
+Anything beyond that should be documented from code that actually exists, not from older planning notes.
