@@ -10,14 +10,14 @@ from cv_screener.cli.serve import (
     ChainlitLauncher,
     ChainlitServeRequest,
     _chainlit_url,
+    _project_root,
     default_chainlit_app_path,
 )
 
 
 def test_default_chainlit_app_path_points_to_project_app() -> None:
-    assert default_chainlit_app_path() == Path(
-        "/home/jozayas/Leadtech/cv-screener/src/cv_screener/chainlit/app.py"
-    )
+    expected = Path(serve_module.__file__).resolve().parents[1] / "chainlit" / "app.py"
+    assert default_chainlit_app_path() == expected
 
 
 def test_chainlit_launcher_runs_uvicorn_with_factory_target(
@@ -52,7 +52,7 @@ def test_chainlit_launcher_runs_uvicorn_with_factory_target(
         "host": "127.0.0.1",
         "port": 9000,
         "reload": True,
-        "reload_dirs": ["/home/jozayas/Leadtech/cv-screener"],
+        "reload_dirs": [str(_project_root())],
     }
     assert app_path == Path(os.environ[CHAINLIT_APP_PATH_ENV])
 
