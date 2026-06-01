@@ -40,6 +40,8 @@ uv run cv-screener ingest --reset
 
 ```bash
 uv run cv-screener query "Which candidates mention Python and FastAPI?"
+uv run cv-screener query "Who knows Python?"
+uv run cv-screener query "Summarize the profile of Alejandro García Martínez"
 ```
 
 7. Run the Chainlit chat UI:
@@ -69,3 +71,11 @@ The repo currently exposes these commands:
 - `serve`
 
 Older documentation that references additional commands is stale.
+
+## Query Behavior Notes
+
+- `Give me the CV of <candidate>` returns the matched CV document directly.
+- `Summarize the profile of <candidate>` resolves the matched CV document directly, then summarizes from that CV content.
+- `Summarize the profile of <partial name>` asks for clarification when the name is missing or ambiguous.
+- `Who knows Python?` and `Who has Python experience?` use deterministic targeted lookup and return every matching candidate with deduped evidence.
+- Broader recruiter-style questions like `Who has Python backend experience?` still use the planner/retrieval/rerank path.

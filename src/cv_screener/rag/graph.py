@@ -196,17 +196,6 @@ def targeted_lookup_graph_node(
     )
 
 
-def _next_node_after_targeted_lookup(
-    state: RAGState,
-) -> Literal["hydrate", "planner", "finalize", "return_profile_cv"]:
-    lookup = state.get("targeted_lookup")
-    if isinstance(lookup, TargetedLookupOutput) and lookup.fallback_to_semantic:
-        return "planner"
-    if isinstance(lookup, TargetedLookupOutput) and lookup.response_mode == "profile":
-        return "return_profile_cv"
-    return "hydrate"
-
-
 def _next_node_after_hydrate(state: RAGState) -> Literal["answer", "finalize"]:
     lookup = state.get("targeted_lookup")
     if isinstance(lookup, TargetedLookupOutput):

@@ -72,6 +72,7 @@ Query from the CLI:
 
 ```bash
 uv run cv-screener query "Who has Python experience?"
+uv run cv-screener query "Summarize the profile of Alejandro García Martínez"
 ```
 
 Run the chat UI:
