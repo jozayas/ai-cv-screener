@@ -161,9 +161,23 @@ def _format_candidate_list_response(
                 f"[{len(citations) + 1}] {candidate_name} - {source_file} (page {page}, {section})"
             )
 
-    answer_text = "Candidates who match the query: " + ", ".join(
-        f"{name} [{index}]" for index, name in enumerate(names, start=1)
+    answer_text = _format_candidate_list_answer_text(
+        names,
+        include_citation_marker=bool(citations),
     )
     if citations:
         return "\n\n".join([answer_text, "Sources:\n" + "\n".join(citations)])
     return answer_text
+
+
+def _format_candidate_list_answer_text(
+    names: list[str],
+    *,
+    include_citation_marker: bool,
+) -> str:
+    if len(names) == 1:
+        citation_marker = " [1]" if include_citation_marker else ""
+        return f"The matching candidate is {names[0]}{citation_marker}."
+    return "Candidates who match the query: " + ", ".join(
+        f"{name} [{index}]" for index, name in enumerate(names, start=1)
+    )

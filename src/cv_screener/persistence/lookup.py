@@ -20,6 +20,7 @@ from cv_screener.persistence.schema import (
 from cv_screener.retrieval.schema import RetrievedChunk
 
 _DEFAULT_MIN_NAME_MATCH_SCORE = 0.72
+_PARENTHETICAL_PATTERN = re.compile(r"\(([^()]*)\)")
 
 
 def _normalize(value: str) -> str:
@@ -27,6 +28,23 @@ def _normalize(value: str) -> str:
     stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
     cleaned = re.sub(r"[^a-z0-9]+", " ", stripped.casefold())
     return " ".join(cleaned.split())
+
+
+def _institution_lookup_keys(value: str) -> set[str]:
+    normalized = _normalize(value)
+    if not normalized:
+        return set()
+    keys = {normalized}
+    without_parentheticals = _PARENTHETICAL_PATTERN.sub(" ", value)
+    base_key = _normalize(without_parentheticals)
+    if base_key:
+        keys.add(base_key)
+    keys.update(
+        parenthetical
+        for match in _PARENTHETICAL_PATTERN.finditer(value)
+        if (parenthetical := _normalize(match.group(1)))
+    )
+    return keys
 
 
 def _name_match_score(
@@ -163,22 +181,29 @@ class SQLiteLookupService:
 
     def find_candidates_by_education(self, institution: str) -> list[CandidateMatch]:
         """Return all candidates who studied at the given institution."""
-        normalized = _normalize(institution)
-        stmt = (
-            select(candidates.c.candidate_id, candidates.c.full_name)
-            .select_from(
-                education.join(
-                    candidates,
-                    education.c.candidate_id == candidates.c.candidate_id,
-                )
+        lookup_keys = _institution_lookup_keys(institution)
+        if not lookup_keys:
+            return []
+        stmt = select(
+            candidates.c.candidate_id,
+            candidates.c.full_name,
+            education.c.institution,
+            education.c.normalized_institution,
+        ).select_from(
+            education.join(
+                candidates,
+                education.c.candidate_id == candidates.c.candidate_id,
             )
-            .where(education.c.normalized_institution == normalized)
         )
         with self._engine.begin() as conn:
             rows = conn.execute(stmt).all()
         seen: set[str] = set()
         matches: list[CandidateMatch] = []
         for row in rows:
+            row_keys = _institution_lookup_keys(row.institution)
+            row_keys.add(_normalize(row.normalized_institution))
+            if lookup_keys.isdisjoint(row_keys):
+                continue
             if row.candidate_id in seen:
                 continue
             seen.add(row.candidate_id)

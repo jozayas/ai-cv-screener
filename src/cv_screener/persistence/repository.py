@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import pathlib
 import re
+import unicodedata
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import Connection, Engine, create_engine, delete, insert, select, update
 
-from cv_screener.cv_generation.content.yaml_io import load_cv_profile
 from cv_screener.ingestion.indexing.points import (
     document_id_for_chunk,
     point_id_for_chunk,
@@ -29,7 +28,6 @@ from cv_screener.persistence.schema import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from cv_screener.cv_generation.content.schema import CVProfile
     from cv_screener.ingestion.chunking.schema import Chunk
     from cv_screener.ingestion.parsing.schema import ParsedCV
 
@@ -37,6 +35,12 @@ _CANDIDATE_ID_PATTERN = re.compile(
     r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
 )
+_UNIVERSITY_PATTERN = re.compile(
+    r"\b((?:Universidad|Universitat|University|Université|Ecole|École|Institute|"
+    r"Instituto)[^,\n\r\u2013-]*(?:\([A-Za-z0-9 .&+-]{2,16}\))?)",
+    re.IGNORECASE,
+)
+_MARKDOWN_TOKEN_PATTERN = re.compile(r"[*_`]+")
 
 
 class CanonicalStoreProtocol(Protocol):
@@ -51,14 +55,72 @@ class CanonicalStoreProtocol(Protocol):
         """Persist parsed CVs and chunks as canonical extracted data."""
 
 
-@dataclass(frozen=True)
-class _MatchedProfile:
-    profile: CVProfile
-    yaml_path: Path
-
-
 def _normalize(value: str) -> str:
-    return " ".join(value.casefold().split())
+    decomposed = unicodedata.normalize("NFKD", value)
+    stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
+    cleaned = re.sub(r"[^a-z0-9]+", " ", stripped.casefold())
+    return " ".join(cleaned.split())
+
+
+def _clean_extracted_value(value: str) -> str:
+    cleaned = _MARKDOWN_TOKEN_PATTERN.sub("", value)
+    return " ".join(cleaned.strip(" \t\r\n,.;:[]{}").split())
+
+
+def _dedupe_extracted_values(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        cleaned = _clean_extracted_value(value)
+        if not cleaned:
+            continue
+        normalized = _normalize(cleaned)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(cleaned)
+    return deduped
+
+
+def _looks_like_institution(value: str) -> bool:
+    cleaned = _clean_extracted_value(value)
+    normalized = _normalize(cleaned)
+    if re.search(
+        r"\b(universidad|universitat|university|universite|ecole|institute|instituto)\b",
+        normalized,
+    ):
+        return True
+    return bool(re.fullmatch(r"[A-Z0-9]{3,8}", cleaned))
+
+
+def _skill_names_from_chunks(chunks_to_extract: list[Chunk]) -> list[str]:
+    return _dedupe_extracted_values(
+        [skill for chunk in chunks_to_extract for skill in chunk.detected_skills]
+    )
+
+
+def _education_institutions_from_chunks(chunks_to_extract: list[Chunk]) -> list[str]:
+    detected = [
+        university
+        for chunk in chunks_to_extract
+        if _is_education_context(chunk)
+        for university in chunk.detected_universities
+        if _looks_like_institution(university)
+    ]
+    parsed_from_education_text = [
+        match.group(1)
+        for chunk in chunks_to_extract
+        if _is_education_context(chunk)
+        for match in _UNIVERSITY_PATTERN.finditer(chunk.text)
+    ]
+    return _dedupe_extracted_values([*detected, *parsed_from_education_text])
+
+
+def _is_education_context(chunk: Chunk) -> bool:
+    if chunk.section.casefold() == "education":
+        return True
+    cleaned_text = _MARKDOWN_TOKEN_PATTERN.sub("", chunk.text).lstrip()
+    return cleaned_text.casefold().startswith("education")
 
 
 def _candidate_id_from_filename(filename_stem: str) -> str | None:
@@ -76,7 +138,7 @@ class SQLiteCanonicalRepository:
     """Canonical SQL store that persists candidate records and CV chunks."""
 
     def __init__(self, *, sqlite_path: Path, content_dir: Path) -> None:
-        """Bind database and YAML source paths for canonical persistence."""
+        """Bind database and legacy content path for canonical persistence."""
         sqlite_path = pathlib.Path(sqlite_path)
         content_dir = pathlib.Path(content_dir)
         self._sqlite_path = sqlite_path
@@ -111,18 +173,13 @@ class SQLiteCanonicalRepository:
     ) -> None:
         """Persist parsed CVs and chunk rows in one transaction."""
         self.ensure_schema()
-        profiles_by_candidate_id = self._load_profiles_by_candidate_id()
         chunks_by_source_file = self._group_chunks_by_source_file(chunks_to_store)
 
         with self._engine.begin() as conn:
             for cv in parsed_cvs:
-                matched = self._match_profile(cv, profiles_by_candidate_id)
-                candidate_id = (
-                    str(matched.profile.candidate_id)
-                    if matched is not None
-                    else _candidate_id_from_filename(cv.filename)
-                    or _fallback_candidate_id(cv)
-                )
+                candidate_id = _candidate_id_from_filename(
+                    cv.filename
+                ) or _fallback_candidate_id(cv)
                 source_file = cv.source_path.name
                 source_chunks = chunks_by_source_file.get(source_file, [])
                 document_id = (
@@ -134,22 +191,20 @@ class SQLiteCanonicalRepository:
                 self._upsert_candidate(
                     conn=conn,
                     candidate_id=candidate_id,
-                    matched=matched,
                     fallback_name=source_chunks[0].candidate_name
                     if source_chunks
-                    else None,
+                    else cv.title.strip(),
                 )
                 self._replace_structured_rows(
                     conn=conn,
                     candidate_id=candidate_id,
-                    profile=matched.profile if matched is not None else None,
+                    source_chunks=source_chunks,
                 )
                 self._upsert_document(
                     conn=conn,
                     document_id=document_id,
                     candidate_id=candidate_id,
                     cv=cv,
-                    yaml_path=matched.yaml_path if matched is not None else None,
                 )
                 self._replace_document_chunks(
                     conn=conn,
@@ -157,18 +212,6 @@ class SQLiteCanonicalRepository:
                     document_id=document_id,
                     source_chunks=source_chunks,
                 )
-
-    def _load_profiles_by_candidate_id(self) -> dict[str, _MatchedProfile]:
-        profiles: dict[str, _MatchedProfile] = {}
-        if not self._content_dir.exists():
-            return profiles
-        for yaml_path in sorted(self._content_dir.glob("*.yaml")):
-            profile = load_cv_profile(yaml_path)
-            profiles[str(profile.candidate_id)] = _MatchedProfile(
-                profile=profile,
-                yaml_path=yaml_path,
-            )
-        return profiles
 
     @staticmethod
     def _group_chunks_by_source_file(
@@ -231,36 +274,20 @@ class SQLiteCanonicalRepository:
                     .values(parsed_markdown=markdown)
                 )
 
-    @staticmethod
-    def _match_profile(
-        cv: ParsedCV,
-        profiles_by_candidate_id: dict[str, _MatchedProfile],
-    ) -> _MatchedProfile | None:
-        candidate_id = _candidate_id_from_filename(cv.filename)
-        if candidate_id is None:
-            return None
-        return profiles_by_candidate_id.get(candidate_id)
-
     def _upsert_candidate(
         self,
         *,
         conn: Connection,
         candidate_id: str,
-        matched: _MatchedProfile | None,
         fallback_name: str | None,
     ) -> None:
-        profile = matched.profile if matched is not None else None
         values = {
             "candidate_id": candidate_id,
-            "full_name": profile.full_name
-            if profile is not None
-            else (fallback_name or "Unknown"),
-            "email": profile.email if profile is not None else None,
-            "phone": profile.phone if profile is not None else None,
-            "location": profile.location if profile is not None else None,
-            "professional_summary": (
-                profile.professional_summary if profile is not None else None
-            ),
+            "full_name": fallback_name or "Unknown",
+            "email": None,
+            "phone": None,
+            "location": None,
+            "professional_summary": None,
         }
         _ = conn.execute(
             delete(candidates).where(candidates.c.candidate_id == candidate_id)
@@ -272,7 +299,7 @@ class SQLiteCanonicalRepository:
         *,
         conn: Connection,
         candidate_id: str,
-        profile: CVProfile | None,
+        source_chunks: list[Chunk],
     ) -> None:
         _ = conn.execute(delete(skills).where(skills.c.candidate_id == candidate_id))
         _ = conn.execute(
@@ -281,10 +308,8 @@ class SQLiteCanonicalRepository:
         _ = conn.execute(
             delete(experience).where(experience.c.candidate_id == candidate_id)
         )
-        if profile is None:
-            return
-
-        if profile.skills:
+        skill_names = _skill_names_from_chunks(source_chunks)
+        if skill_names:
             _ = conn.execute(
                 insert(skills),
                 [
@@ -294,43 +319,24 @@ class SQLiteCanonicalRepository:
                         "name": skill_name,
                         "normalized_name": _normalize(skill_name),
                     }
-                    for index, skill_name in enumerate(profile.skills)
+                    for index, skill_name in enumerate(skill_names)
                 ],
             )
-        if profile.education:
+        institutions = _education_institutions_from_chunks(source_chunks)
+        if institutions:
             _ = conn.execute(
                 insert(education),
                 [
                     {
                         "candidate_id": candidate_id,
                         "sort_order": index,
-                        "institution": entry.institution,
-                        "normalized_institution": _normalize(entry.institution),
-                        "degree": entry.degree,
-                        "field_of_study": entry.field_of_study,
-                        "graduation_year": entry.graduation_year,
+                        "institution": institution,
+                        "normalized_institution": _normalize(institution),
+                        "degree": "",
+                        "field_of_study": "",
+                        "graduation_year": 0,
                     }
-                    for index, entry in enumerate(profile.education)
-                ],
-            )
-        if profile.experience:
-            _ = conn.execute(
-                insert(experience),
-                [
-                    {
-                        "candidate_id": candidate_id,
-                        "sort_order": index,
-                        "company": entry.company,
-                        "normalized_company": _normalize(entry.company),
-                        "role": entry.role,
-                        "normalized_role": _normalize(entry.role),
-                        "start_date": entry.start_date.isoformat(),
-                        "end_date": entry.end_date.isoformat()
-                        if entry.end_date
-                        else None,
-                        "summary": entry.summary,
-                    }
-                    for index, entry in enumerate(profile.experience)
+                    for index, institution in enumerate(institutions)
                 ],
             )
 
@@ -341,7 +347,6 @@ class SQLiteCanonicalRepository:
         document_id: str,
         candidate_id: str,
         cv: ParsedCV,
-        yaml_path: Path | None,
     ) -> None:
         _ = conn.execute(
             delete(documents).where(documents.c.document_id == document_id)
@@ -355,7 +360,7 @@ class SQLiteCanonicalRepository:
                 document_title=cv.title.strip(),
                 pdf_path=str(cv.source_path),
                 parsed_markdown=cv.full_text,
-                yaml_path=str(yaml_path) if yaml_path is not None else None,
+                yaml_path=None,
             )
         )
 

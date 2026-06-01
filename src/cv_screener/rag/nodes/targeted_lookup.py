@@ -171,7 +171,7 @@ def _resolve_lookup(
             candidate_names=[candidate.full_name for candidate in candidates],
             sections=["EDUCATION"],
             response_mode="list_candidates",
-            fallback_to_semantic=not candidates,
+            fallback_to_semantic=False,
         )
 
     skill_match = re.search(
@@ -187,7 +187,7 @@ def _resolve_lookup(
                 candidate_names=[candidate.full_name for candidate in candidates],
                 sections=["SKILLS", "EXPERIENCE", "PROJECTS"],
                 response_mode="list_candidates",
-                fallback_to_semantic=not candidates,
+                fallback_to_semantic=False,
             )
 
     profile_match = re.search(

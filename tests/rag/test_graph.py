@@ -848,3 +848,211 @@ def test_graph_routes_python_experience_queries_to_targeted_skill_lookup() -> No
         "[1] Marie Curie - marie-curie.pdf (page 1, SKILLS)\n"
         "[2] Ada Lovelace - ada-lovelace.pdf (page 2, EXPERIENCE)"
     )
+
+
+def test_graph_formats_single_targeted_lookup_match_naturally() -> None:
+    hydrated = [
+        RetrievedChunk(
+            candidate_name="José Luis Zayas Alcaide",
+            source_file="jose-luis-zayas-alcaide.pdf",
+            document_title="José Luis Zayas Alcaide CV",
+            page=2,
+            section="EDUCATION",
+            text="Universidad de Málaga (UMA), MS in Big Data & AI.",
+            score=1.0,
+            rank=1,
+        ),
+    ]
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="Deterministic education lookup.",
+            )
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="unused")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(
+            FakeLookupData(
+                candidates_by_education=[
+                    FakeLookupCandidate("cand-1", "José Luis Zayas Alcaide"),
+                ],
+                hydrated_chunks=hydrated,
+            )
+        ),
+        retriever=FakeRetriever([]),
+        reranker=FakeReranker([]),
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="unused",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        source_file="ignored.pdf",
+                        page=1,
+                        section="EDUCATION",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke(
+        {"user_query": "Which candidate graduated from UMA?"},
+        context=dependencies,
+    )
+
+    assert result.get("final_text") == (
+        "The matching candidate is José Luis Zayas Alcaide [1].\n\n"
+        "Sources:\n"
+        "[1] José Luis Zayas Alcaide - jose-luis-zayas-alcaide.pdf (page 2, EDUCATION)"
+    )
+
+
+def test_graph_does_not_fallback_to_semantic_when_skill_lookup_has_no_match() -> None:
+    retriever = FakeRetriever(
+        [
+            RetrievedChunk(
+                candidate_name="Ada Lovelace",
+                source_file="ada-lovelace.pdf",
+                document_title="Ada Lovelace CV",
+                page=1,
+                section="SKILLS",
+                text="Python, analytics.",
+                score=0.9,
+                rank=1,
+            )
+        ]
+    )
+    reranker = FakeReranker([])
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="Deterministic skill lookup.",
+            )
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="rust")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(),
+        retriever=retriever,
+        reranker=reranker,
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="unused",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        source_file="ignored.pdf",
+                        page=1,
+                        section="SKILLS",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke({"user_query": "Who knows Rust?"}, context=dependencies)
+
+    assert result.get("targeted_lookup") == TargetedLookupOutput(
+        candidate_ids=[],
+        candidate_names=[],
+        sections=["SKILLS", "EXPERIENCE", "PROJECTS"],
+        response_mode="list_candidates",
+        fallback_to_semantic=False,
+    )
+    assert (
+        result.get("final_text")
+        == "I don't have enough information in the indexed CVs to answer that."
+    )
+    assert result.get("nodes_executed") == [
+        "router",
+        "targeted_lookup",
+        "hydrate",
+        "finalize",
+    ]
+    assert retriever.queries == []
+    assert reranker.calls == []
+
+
+def test_graph_does_not_fallback_to_semantic_when_education_lookup_has_no_match() -> (
+    None
+):
+    retriever = FakeRetriever(
+        [
+            RetrievedChunk(
+                candidate_name="Ada Lovelace",
+                source_file="ada-lovelace.pdf",
+                document_title="Ada Lovelace CV",
+                page=1,
+                section="EDUCATION",
+                text="Studied mathematics at University of London.",
+                score=0.9,
+                rank=1,
+            )
+        ]
+    )
+    reranker = FakeReranker([])
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="Deterministic education lookup.",
+            )
+        ),
+        planner_model=make_runnable(PlannerOutput(primary_query="UMA")),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(),
+        retriever=retriever,
+        reranker=reranker,
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="unused",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        source_file="ignored.pdf",
+                        page=1,
+                        section="EDUCATION",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+        ),
+    )
+    graph = build_rag_graph()
+
+    result = graph.invoke(
+        {"user_query": "Which candidate graduated from UMA?"},
+        context=dependencies,
+    )
+
+    assert result.get("targeted_lookup") == TargetedLookupOutput(
+        candidate_ids=[],
+        candidate_names=[],
+        sections=["EDUCATION"],
+        response_mode="list_candidates",
+        fallback_to_semantic=False,
+    )
+    assert (
+        result.get("final_text")
+        == "I don't have enough information in the indexed CVs to answer that."
+    )
+    assert result.get("nodes_executed") == [
+        "router",
+        "targeted_lookup",
+        "hydrate",
+        "finalize",
+    ]
+    assert retriever.queries == []
+    assert reranker.calls == []
