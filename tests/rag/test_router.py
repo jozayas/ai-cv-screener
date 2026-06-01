@@ -77,6 +77,22 @@ def test_router_sends_python_experience_candidate_queries_to_targeted_lookup() -
     assert next_node_for_route(route) == "targeted_lookup"
 
 
+def test_router_sends_experience_with_skill_queries_to_targeted_lookup() -> None:
+    update = router_node(
+        {"user_query": "Who has experience with Python?"},
+        model=make_router_runnable(
+            RouteDecision(
+                route=RouteTarget.CV_QUERY,
+                reasoning="unused",
+            )
+        )[0],
+    )
+
+    route = update["route"]
+    assert route.route is RouteTarget.TARGETED_LOOKUP
+    assert next_node_for_route(route) == "targeted_lookup"
+
+
 def test_router_accepts_clarification_route_without_extra_payload() -> None:
     model, _ = make_router_runnable(
         {

@@ -1,6 +1,6 @@
 [project]
 name = "cv-screener"
-version = "0.1.0"
+version = "1.0.0"
 description = "Local-first prototype for screening fake CVs with a hybrid RAG pipeline."
 readme = "README.md"
 authors = [
