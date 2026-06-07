@@ -411,11 +411,13 @@ The revised plan should follow these documented idioms as closely as possible:
 
 - Repository code owns schema creation, migration/backfill, candidate ID inference, skill parsing heuristics, education parsing heuristics, and row replacement.
 - Lookup code duplicates normalization concerns and owns fuzzy thresholds separately.
+- The canonical persistence schema already has an `experience` table, but the current repository slice does not populate it even when parsed CV data includes structured experience entries.
 
 **Why it hurts**
 
 - Canonical persistence is not clearly separated from extraction heuristics.
 - The storage layer has business rules mixed into it.
+- Downstream lookup and evaluation work cannot rely on persisted experience rows, so the database under-represents the parsed CV content.
 
 **Suggested fix**
 
@@ -424,6 +426,7 @@ The revised plan should follow these documented idioms as closely as possible:
   - canonical writes
   - extracted metadata heuristics
   - lookup/search helpers
+- Add an explicit canonical experience write path that maps parsed experience entries into `experience` rows before any later heuristic enrichment.
 - Introduce a generic database configuration and connection factory at the SQLAlchemy layer, using a database URL instead of SQLite-specific construction in application services.
 - Keep SQLite as the default local deployment target, but make repositories depend on a generic SQLAlchemy `Engine` / session boundary so PostgreSQL or another backend can replace it without touching application logic.
 - Move thresholds into shared config.
@@ -530,9 +533,10 @@ The revised plan should follow these documented idioms as closely as possible:
 2. Make repositories depend on a generic SQLAlchemy database boundary instead of directly on SQLite path construction.
 3. Keep SQLite as the default local backend, but make backend substitution a configuration concern instead of an application-code concern.
 4. Create long-lived composition-level factories for `Engine` and `QdrantClient`.
-5. Split repository bootstrap/migration from canonical writes.
-6. Move extraction heuristics to dedicated helper modules.
-7. Move lookup thresholds and normalization policy into shared configuration/utilities.
+5. Add canonical persistence for structured experience entries so stored candidate data matches the parsed CV schema.
+6. Split repository bootstrap/migration from canonical writes.
+7. Move extraction heuristics to dedicated helper modules.
+8. Move lookup thresholds and normalization policy into shared configuration/utilities.
 
 ### Phase 8: remove duplicated config representations
 

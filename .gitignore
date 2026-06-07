@@ -219,6 +219,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Local codebase graph output
+graphify-out/
+
 data/*
 .chainlit/
 .files/

@@ -1,32 +1,38 @@
 """Helpers for CV content generation CLI commands."""
 
-from importlib import import_module
 from pathlib import Path
 
-import typer
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from cv_screener.cli.dependencies import build_photo_generation_service
-from cv_screener.cli.runtime import init_command, should_use_progress
+from cv_screener.cli.runtime import (
+    CLIRuntimeSettings,
+    init_runtime,
+    should_use_progress,
+)
 from cv_screener.config import GenerationConfig
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     CVProfileSource,
     GenerationMode,
 )
+from cv_screener.cv_generation.content.sources import (
+    OpenAICVProfileSource,
+    SeededCVProfileSource,
+)
 from cv_screener.cv_generation.photos.service import PhotoGenerationSummary
 
 
 def generate_cv_content_files(
     *,
-    ctx: typer.Context | None,
+    runtime: CLIRuntimeSettings,
     count: int,
     mode: GenerationMode,
     output_dir: Path,
     generation_settings: GenerationConfig,
 ) -> list[Path]:
     """Generate YAML CV content files with command-configured runtime behavior."""
-    runtime, console = init_command(ctx)
+    runtime, console = init_runtime(runtime)
     service = CVGenerationService(
         output_dir=output_dir,
         profile_source=build_profile_source(
@@ -61,23 +67,19 @@ def build_profile_source(
     generation_settings: GenerationConfig,
 ) -> CVProfileSource:
     """Build the profile source for the selected generation mode."""
-    sources_module = import_module("cv_screener.cv_generation.content.sources")
-
     if mode is GenerationMode.LLM:
-        return sources_module.OpenAICVProfileSource(generation_settings)
+        return OpenAICVProfileSource(generation_settings)
 
-    return sources_module.SeededCVProfileSource()
+    return SeededCVProfileSource()
 
 
 def generate_cv_photo_files(
     *,
-    ctx: typer.Context | None,
     paths: list[Path],
     photo_dir: Path,
     generation_settings: GenerationConfig,
 ) -> PhotoGenerationSummary:
     """Generate or refresh CV photos for a set of YAML profiles."""
-    _ = ctx
     service = build_photo_generation_service(
         photo_dir=photo_dir,
         generation_settings=generation_settings,

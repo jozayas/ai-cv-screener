@@ -17,7 +17,11 @@ from cv_screener.cli.generation import (
     generate_cv_content_files,
     generate_cv_photo_files,
 )
-from cv_screener.cli.runtime import init_command, should_use_progress
+from cv_screener.cli.runtime import (
+    DEFAULT_RUNTIME_SETTINGS,
+    init_command,
+    should_use_progress,
+)
 from cv_screener.cli.serve import ChainlitServeRequest, default_chainlit_app_path
 from cv_screener.config import AppSettings
 from cv_screener.cv_generation.content.generator import (
@@ -65,9 +69,10 @@ def generate_content(
 ) -> list[Path]:
     """Generate validated CV content YAML files."""
     settings = _settings()
+    runtime, _console = init_command(ctx)
     resolved_output_dir = output_dir or settings.paths.cv_content_dir
     written_files = generate_cv_content_files(
-        ctx=ctx,
+        runtime=runtime,
         count=count,
         mode=mode,
         output_dir=resolved_output_dir,
@@ -116,7 +121,7 @@ def generate_cvs(
     resolved_pdf_dir = pdf_dir or settings.paths.cv_pdf_dir
     resolved_photo_dir = settings.paths.generated_photo_dir
     written_files = generate_cv_content_files(
-        ctx=None,
+        runtime=DEFAULT_RUNTIME_SETTINGS,
         count=count,
         mode=mode,
         output_dir=resolved_content_dir,
@@ -126,7 +131,6 @@ def generate_cvs(
         f"Generated {len(written_files)} CV YAML files in {resolved_content_dir}."
     )
     photo_summary = generate_cv_photo_files(
-        ctx=None,
         paths=written_files,
         photo_dir=resolved_photo_dir,
         generation_settings=settings.generation,

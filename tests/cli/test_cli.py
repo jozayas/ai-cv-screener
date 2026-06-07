@@ -138,12 +138,10 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
 
     def fake_generate_photos(
         *,
-        ctx: object | None,
         paths: list[Path],
         photo_dir: Path,
         generation_settings: object,
     ) -> object:
-        assert ctx is None
         assert paths == generated_paths
         assert photo_dir == Path("data/generated/photos")
         assert generation_settings is not None
