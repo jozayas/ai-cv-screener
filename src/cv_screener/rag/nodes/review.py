@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable, RunnableConfig
 
-    from cv_screener.config import RAGModelSettings
+    from cv_screener.config import RAGConfig
     from cv_screener.rag.state import RAGState
     from cv_screener.retrieval.schema import RetrievedChunk
 
@@ -29,7 +29,7 @@ DEFAULT_REVIEW_PASSES = 1
 
 
 def build_reviewer_model(
-    settings: RAGModelSettings | None = None,
+    settings: RAGConfig | None = None,
 ) -> Runnable[LanguageModelInput, ReviewOutput]:
     """Build the structured reviewer model for OpenAI-compatible chat backends."""
     return build_structured_output_model(ReviewOutput, settings=settings)
@@ -41,7 +41,7 @@ def review_answer(
     chunks: list[RetrievedChunk],
     *,
     model: Runnable[LanguageModelInput, ReviewOutput],
-    config: RunnableConfig | None = None,
+    enable_llm_review: bool = False,
 ) -> ReviewOutput:
     """Review whether an answer is grounded in the cited CV evidence."""
     if answer.abstained:
@@ -54,13 +54,17 @@ def review_answer(
             verdict=ReviewVerdict.ABSTAIN,
             reasoning="No cited evidence was available to support the answer.",
         )
+    if not enable_llm_review:
+        return ReviewOutput(
+            verdict=ReviewVerdict.APPROVE,
+            reasoning="Citations match retrieved CV evidence.",
+        )
 
     return invoke_structured_output(
         _build_messages(user_query, answer, chunks),
         model=model,
         schema=ReviewOutput,
         label="reviewer",
-        config=config,
     )
 
 
@@ -70,8 +74,11 @@ def reviewer_node(
     *,
     model: Runnable[LanguageModelInput, ReviewOutput],
     max_review_passes: int = DEFAULT_REVIEW_PASSES,
+    enable_llm_review: bool = False,
 ) -> dict[str, object]:
     """LangGraph reviewer node that can approve, revise, or abstain."""
+    del config
+
     user_query = state.get("user_query")
     if not isinstance(user_query, str) or not user_query.strip():
         msg = "review state must include a non-empty user_query"
@@ -92,7 +99,7 @@ def reviewer_node(
         answer,
         cited_chunks,
         model=model,
-        config=config,
+        enable_llm_review=enable_llm_review,
     )
 
     update: dict[str, object] = {"review": review}

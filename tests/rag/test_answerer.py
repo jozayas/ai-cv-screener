@@ -7,7 +7,7 @@ from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
-from cv_screener.config import RAGModelSettings
+from cv_screener.config import RAGConfig
 from cv_screener.rag.nodes.answer import (
     ABSTAINED_ANSWER,
     answer_query,
@@ -46,6 +46,78 @@ def test_answer_query_abstains_without_chunks() -> None:
 
     assert result == AnswerOutput(answer=ABSTAINED_ANSWER, abstained=True)
     assert invocations == []
+
+
+def test_answer_query_uses_model_for_candidate_list_questions() -> None:
+    model, invocations = make_answer_runnable(
+        AnswerOutput(
+            answer="Alexandra Chen and Michael Chen led platform migrations.",
+            citations=[
+                AnswerCitation(
+                    rank=1,
+                    candidate_name="Alexandra Chen",
+                    source_file="alexandra.pdf",
+                    page=1,
+                    section="Experience",
+                ),
+                AnswerCitation(
+                    rank=2,
+                    candidate_name="Michael Chen",
+                    source_file="michael.pdf",
+                    page=1,
+                    section="Summary",
+                ),
+            ],
+        )
+    )
+
+    result = answer_query(
+        "Which candidates led platform migrations?",
+        [
+            RetrievedChunk(
+                candidate_name="Alexandra Chen",
+                source_file="alexandra.pdf",
+                document_title="Alexandra Chen CV",
+                page=1,
+                section="Experience",
+                text="Led migration from monolith to microservices.",
+                score=0.9,
+                rank=1,
+            ),
+            RetrievedChunk(
+                candidate_name="Michael Chen",
+                source_file="michael.pdf",
+                document_title="Michael Chen CV",
+                page=1,
+                section="Summary",
+                text="Led platform migration.",
+                score=0.8,
+                rank=2,
+            ),
+        ],
+        model=model,
+    )
+
+    assert result == AnswerOutput(
+        answer="Alexandra Chen and Michael Chen led platform migrations.",
+        citations=[
+            AnswerCitation(
+                rank=1,
+                candidate_name="Alexandra Chen",
+                source_file="alexandra.pdf",
+                page=1,
+                section="Experience",
+            ),
+            AnswerCitation(
+                rank=2,
+                candidate_name="Michael Chen",
+                source_file="michael.pdf",
+                page=1,
+                section="Summary",
+            ),
+        ],
+    )
+    assert len(invocations) == 1
 
 
 def test_answerer_node_uses_reranked_chunks() -> None:
@@ -162,7 +234,7 @@ def test_answerer_build_model_parses_json_without_tool_calling(
             )
         ],
         model=build_answer_model(
-            RAGModelSettings(
+            RAGConfig(
                 openai_base_url="http://localhost:11434/v1",
                 openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",

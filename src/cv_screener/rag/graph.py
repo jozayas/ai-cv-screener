@@ -76,6 +76,8 @@ class GraphDependencies:
     reranker: RerankerProtocol
     answer_model: Runnable[LanguageModelInput, AnswerOutput]
     reviewer_model: Runnable[LanguageModelInput, ReviewOutput]
+    enable_llm_review: bool = False
+    max_retrieval_queries: int = 1
 
 
 def build_rag_graph() -> CompiledStateGraph[Any, GraphDependencies, Any, Any]:
@@ -174,7 +176,11 @@ def retrieve_graph_node(
     return cast(
         "dict[str, object]",
         {
-            **retrieve_state_node(state, retriever=runtime.context.retriever),
+            **retrieve_state_node(
+                state,
+                retriever=runtime.context.retriever,
+                max_queries=runtime.context.max_retrieval_queries,
+            ),
             "nodes_executed": _executed(state, "retrieve"),
         },
     )
@@ -297,7 +303,10 @@ def review_graph_node(
 ) -> dict[str, object]:
     """Graph adapter for the groundedness review node."""
     result = reviewer_node(
-        state, config=get_config(), model=runtime.context.reviewer_model
+        state,
+        config=get_config(),
+        model=runtime.context.reviewer_model,
+        enable_llm_review=runtime.context.enable_llm_review,
     )
     result["nodes_executed"] = _executed(state, "review")
     return result

@@ -19,7 +19,7 @@ from cv_screener.cli.generation import (
 )
 from cv_screener.cli.runtime import init_command, should_use_progress
 from cv_screener.cli.serve import ChainlitServeRequest, default_chainlit_app_path
-from cv_screener.config import LookupSettings
+from cv_screener.config import AppSettings
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     GenerationMode,
@@ -41,6 +41,11 @@ def register_commands(app: typer.Typer) -> None:
     app.command("serve")(serve)
 
 
+def _settings() -> AppSettings:
+    """Load application settings for CLI default resolution."""
+    return AppSettings()
+
+
 def generate_content(
     ctx: typer.Context,
     count: int = typer.Option(3, min=1, max=50, help="Number of YAML CVs to generate."),
@@ -50,22 +55,25 @@ def generate_content(
             help="Generation mode: seeded local samples or LLM-backed generation."
         ),
     ] = GenerationMode.SEEDED,
-    output_dir: Path = typer.Option(
-        Path("data/cvs_contents"),
+    output_dir: Path | None = typer.Option(
+        None,
         file_okay=False,
         dir_okay=True,
         writable=True,
-        help="Directory where YAML CVs will be written.",
+        help="Directory where YAML CVs will be written. Defaults to env-backed app settings.",
     ),
 ) -> list[Path]:
     """Generate validated CV content YAML files."""
+    resolved_output_dir = output_dir or _settings().paths.cv_content_dir
     written_files = generate_cv_content_files(
         ctx=ctx,
         count=count,
         mode=mode,
-        output_dir=output_dir,
+        output_dir=resolved_output_dir,
     )
-    typer.echo(f"Generated {len(written_files)} CV YAML files in {output_dir}.")
+    typer.echo(
+        f"Generated {len(written_files)} CV YAML files in {resolved_output_dir}."
+    )
     return written_files
 
 
@@ -79,19 +87,19 @@ def generate_cvs(
             help="Generation mode: seeded local samples or LLM-backed generation."
         ),
     ] = GenerationMode.SEEDED,
-    content_dir: Path = typer.Option(
-        Path("data/cvs_contents"),
+    content_dir: Path | None = typer.Option(
+        None,
         file_okay=False,
         dir_okay=True,
         writable=True,
-        help="Directory where YAML CVs will be written.",
+        help="Directory where YAML CVs will be written. Defaults to env-backed app settings.",
     ),
-    pdf_dir: Path = typer.Option(
-        Path("data/cv_pdfs"),
+    pdf_dir: Path | None = typer.Option(
+        None,
         file_okay=False,
         dir_okay=True,
         writable=True,
-        help="Directory where PDF CVs will be written.",
+        help="Directory where PDF CVs will be written. Defaults to env-backed app settings.",
     ),
     template_id: Annotated[
         TemplateId | None,
@@ -101,27 +109,33 @@ def generate_cvs(
     ] = None,
 ) -> None:
     """Generate validated CV content YAML files and render them into PDFs."""
+    settings = _settings()
+    resolved_content_dir = content_dir or settings.paths.cv_content_dir
+    resolved_pdf_dir = pdf_dir or settings.paths.cv_pdf_dir
+    resolved_photo_dir = settings.paths.generated_photo_dir
     written_files = generate_cv_content_files(
         ctx=None,
         count=count,
         mode=mode,
-        output_dir=content_dir,
+        output_dir=resolved_content_dir,
     )
-    typer.echo(f"Generated {len(written_files)} CV YAML files in {content_dir}.")
+    typer.echo(
+        f"Generated {len(written_files)} CV YAML files in {resolved_content_dir}."
+    )
     photo_summary = generate_cv_photo_files(
         ctx=None,
         paths=written_files,
-        photo_dir=Path("data/generated/photos"),
+        photo_dir=resolved_photo_dir,
     )
     typer.echo(
-        f"Prepared {photo_summary.generated_count} CV photos in {Path('data/generated/photos')}."
+        f"Prepared {photo_summary.generated_count} CV photos in {resolved_photo_dir}."
     )
     rendered_files = build_pdf_rendering_service(
-        input_dir=content_dir,
-        output_dir=pdf_dir,
+        input_dir=resolved_content_dir,
+        output_dir=resolved_pdf_dir,
         template_id=template_id,
     ).render_files(written_files)
-    typer.echo(f"Rendered {len(rendered_files)} CV PDFs in {pdf_dir}.")
+    typer.echo(f"Rendered {len(rendered_files)} CV PDFs in {resolved_pdf_dir}.")
 
 
 def generate_photos(
@@ -136,17 +150,18 @@ def generate_photos(
             help="YAML CV file or directory of YAML CV files to update with photos.",
         ),
     ],
-    photo_dir: Path = typer.Option(
-        Path("data/generated/photos"),
+    photo_dir: Path | None = typer.Option(
+        None,
         file_okay=False,
         dir_okay=True,
         writable=True,
-        help="Directory where generated CV photos will be written.",
+        help="Directory where generated CV photos will be written. Defaults to env-backed app settings.",
     ),
 ) -> PhotoGenerationSummary:
     """Generate synthetic headshots for YAML CV profiles."""
     init_command(ctx)
-    service = build_photo_generation_service(photo_dir=photo_dir)
+    resolved_photo_dir = photo_dir or _settings().paths.generated_photo_dir
+    service = build_photo_generation_service(photo_dir=resolved_photo_dir)
     summary = (
         service.generate_directory(input_path)
         if input_path.is_dir()
@@ -197,12 +212,12 @@ def render(
             help="YAML CV file or directory of YAML CV files to render.",
         ),
     ],
-    output_dir: Path = typer.Option(
-        Path("data/cv_pdfs"),
+    output_dir: Path | None = typer.Option(
+        None,
         file_okay=False,
         dir_okay=True,
         writable=True,
-        help="Directory where PDF CV files will be written.",
+        help="Directory where PDF CV files will be written. Defaults to env-backed app settings.",
     ),
     template_id: Annotated[
         TemplateId | None,
@@ -213,10 +228,11 @@ def render(
 ) -> None:
     """Render one YAML CV file or a directory of YAML CV files into PDFs."""
     init_command(ctx)
+    resolved_output_dir = output_dir or _settings().paths.cv_pdf_dir
     input_dir = input_path if input_path.is_dir() else input_path.parent
     service = build_pdf_rendering_service(
         input_dir=input_dir,
-        output_dir=output_dir,
+        output_dir=resolved_output_dir,
         template_id=template_id,
     )
     rendered_files = (
@@ -225,19 +241,19 @@ def render(
         else service.render_files([input_path])
     )
     target = "PDFs" if input_path.is_dir() else "PDF"
-    typer.echo(f"Rendered {len(rendered_files)} {target} in {output_dir}.")
+    typer.echo(f"Rendered {len(rendered_files)} {target} in {resolved_output_dir}.")
 
 
 def ingest(
     ctx: typer.Context,
     *,
-    pdf_dir: Path = typer.Option(
-        Path("data/cv_pdfs"),
+    pdf_dir: Path | None = typer.Option(
+        None,
         exists=True,
         file_okay=False,
         dir_okay=True,
         readable=True,
-        help="Directory of rendered CV PDFs to parse, chunk, and index.",
+        help="Directory of rendered CV PDFs to parse, chunk, and index. Defaults to env-backed app settings.",
     ),
     reset: Annotated[
         bool,
@@ -246,8 +262,9 @@ def ingest(
 ) -> IngestionSummary:
     """Parse rendered CV PDFs, chunk them, and index the chunks into Qdrant."""
     runtime, console = init_command(ctx)
-    service = build_cv_ingestion_service(pdf_dir=pdf_dir)
-    pdf_count = len(sorted(pdf_dir.glob("*.pdf")))
+    resolved_pdf_dir = pdf_dir or _settings().paths.cv_pdf_dir
+    service = build_cv_ingestion_service(pdf_dir=resolved_pdf_dir)
+    pdf_count = len(sorted(resolved_pdf_dir.glob("*.pdf")))
 
     if (
         not should_use_progress(
@@ -289,7 +306,7 @@ def ingest(
                 progress_callback=on_progress,
             )
     typer.echo(
-        f"Ingested {summary.pdf_count} PDFs into {summary.chunk_count} chunks from {pdf_dir}."
+        f"Ingested {summary.pdf_count} PDFs into {summary.chunk_count} chunks from {resolved_pdf_dir}."
     )
     return summary
 
@@ -303,40 +320,47 @@ def query(
 ) -> None:
     """Answer a recruiter-style question from indexed CV content."""
     init_command(ctx)
-    result = build_rag_query_service(
-        candidate_name_min_score=LookupSettings().candidate_name_min_score,
-    ).run(query_text)
+    result = build_rag_query_service(settings=AppSettings()).run(query_text)
     typer.echo(result.final_text)
 
 
 def serve(
     ctx: typer.Context,
     *,
-    host: str = typer.Option("127.0.0.1", help="Host interface for the Chainlit UI."),
-    port: int = typer.Option(8000, min=1, max=65535, help="Port for the Chainlit UI."),
+    host: str | None = typer.Option(
+        None,
+        help="Host interface for the Chainlit UI. Defaults to env-backed app settings.",
+    ),
+    port: int | None = typer.Option(
+        None,
+        min=1,
+        max=65535,
+        help="Port for the Chainlit UI. Defaults to env-backed app settings.",
+    ),
     headless: Annotated[
-        bool,
+        bool | None,
         typer.Option(
             "--headless/--open-browser",
             help="Run without asking Chainlit to open a browser window.",
         ),
-    ] = True,
+    ] = None,
     watch: Annotated[
-        bool,
+        bool | None,
         typer.Option(
             "--watch/--no-watch",
             help="Reload the app when source files change.",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Serve the Chainlit chat UI on top of the existing RAG runtime."""
     init_command(ctx)
+    settings = _settings()
     request = ChainlitServeRequest(
         app_path=default_chainlit_app_path(),
-        host=host,
-        port=port,
-        headless=headless,
-        watch=watch,
+        host=host or settings.serve.host,
+        port=port or settings.serve.port,
+        headless=settings.serve.headless if headless is None else headless,
+        watch=settings.serve.watch if watch is None else watch,
     )
     exit_code = build_chainlit_launcher().run(request)
     if exit_code != 0:

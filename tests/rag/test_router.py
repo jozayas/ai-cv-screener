@@ -7,13 +7,14 @@ from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
-from cv_screener.config import RAGModelSettings
+from cv_screener.config import RAGConfig
 from cv_screener.rag.nodes.route import (
     build_router_model,
     next_node_for_route,
     route_query,
     router_node,
 )
+from cv_screener.rag.prompts import ROUTER_SYSTEM_PROMPT
 from cv_screener.rag.schema import RouteDecision, RouteTarget
 
 
@@ -61,13 +62,32 @@ def test_router_sends_cv_queries_to_planner() -> None:
     assert next_node_for_route(decision) == "planner"
 
 
+def test_router_node_uses_structured_model_for_cv_queries() -> None:
+    model, invocations = make_router_runnable(
+        RouteDecision(
+            route=RouteTarget.CV_QUERY,
+            reasoning="The user asks about candidate experience.",
+        )
+    )
+
+    update = router_node(
+        {"user_query": "Which candidates led platform migrations?"},
+        model=model,
+    )
+
+    route = update["route"]
+    assert route.route is RouteTarget.CV_QUERY
+    assert next_node_for_route(route) == "planner"
+    assert len(invocations) == 1
+
+
 def test_router_sends_python_experience_candidate_queries_to_targeted_lookup() -> None:
     update = router_node(
         {"user_query": "Who has Python experience?"},
         model=make_router_runnable(
             RouteDecision(
-                route=RouteTarget.CV_QUERY,
-                reasoning="unused",
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="The user asks for an exact skill lookup.",
             )
         )[0],
     )
@@ -82,8 +102,8 @@ def test_router_sends_experience_with_skill_queries_to_targeted_lookup() -> None
         {"user_query": "Who has experience with Python?"},
         model=make_router_runnable(
             RouteDecision(
-                route=RouteTarget.CV_QUERY,
-                reasoning="unused",
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="The user asks for an exact skill lookup.",
             )
         )[0],
     )
@@ -91,6 +111,12 @@ def test_router_sends_experience_with_skill_queries_to_targeted_lookup() -> None
     route = update["route"]
     assert route.route is RouteTarget.TARGETED_LOOKUP
     assert next_node_for_route(route) == "targeted_lookup"
+
+
+def test_router_prompt_classifies_exact_skill_queries_as_targeted_lookup() -> None:
+    assert "Who knows <skill>?" in ROUTER_SYSTEM_PROMPT
+    assert "Who has <skill> experience?" in ROUTER_SYSTEM_PROMPT
+    assert "targeted_lookup" in ROUTER_SYSTEM_PROMPT
 
 
 def test_router_accepts_clarification_route_without_extra_payload() -> None:
@@ -107,10 +133,10 @@ def test_router_accepts_clarification_route_without_extra_payload() -> None:
 
 
 def test_router_node_returns_state_update() -> None:
-    model, _ = make_router_runnable(
+    model, invocations = make_router_runnable(
         RouteDecision(
             route=RouteTarget.CV_QUERY,
-            reasoning="The user is asking a CV question.",
+            reasoning="The user asks about candidate skills.",
         )
     )
     update = router_node(
@@ -118,12 +144,9 @@ def test_router_node_returns_state_update() -> None:
         model=model,
     )
 
-    assert update == {
-        "route": RouteDecision(
-            route=RouteTarget.CV_QUERY,
-            reasoning="The user is asking a CV question.",
-        )
-    }
+    route = update["route"]
+    assert route.route is RouteTarget.CV_QUERY
+    assert len(invocations) == 1
 
 
 def test_router_build_model_parses_json_without_tool_calling(
@@ -144,7 +167,7 @@ def test_router_build_model_parses_json_without_tool_calling(
     decision = route_query(
         "hello",
         model=build_router_model(
-            RAGModelSettings(
+            RAGConfig(
                 openai_base_url="http://localhost:11434/v1",
                 openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",

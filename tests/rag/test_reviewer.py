@@ -7,7 +7,7 @@ from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
-from cv_screener.config import RAGModelSettings
+from cv_screener.config import RAGConfig
 from cv_screener.rag.nodes.answer import ABSTAINED_ANSWER
 from cv_screener.rag.nodes.review import (
     build_reviewer_model,
@@ -56,6 +56,45 @@ def test_review_answer_skips_model_for_abstentions() -> None:
     assert invocations == []
 
 
+def test_review_answer_approves_matching_citations_without_llm_by_default() -> None:
+    model, invocations = make_reviewer_runnable(
+        ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+    )
+
+    result = review_answer(
+        "Who has Python experience?",
+        AnswerOutput(
+            answer="Ada Lovelace has Python experience.",
+            citations=[
+                AnswerCitation(
+                    rank=1,
+                    source_file="ada.pdf",
+                    page=2,
+                    section="Experience",
+                )
+            ],
+        ),
+        [
+            RetrievedChunk(
+                source_file="ada.pdf",
+                document_title="Ada Lovelace CV",
+                page=2,
+                section="Experience",
+                text="Built Python data pipelines.",
+                score=0.8,
+                rank=1,
+            )
+        ],
+        model=model,
+    )
+
+    assert result == ReviewOutput(
+        verdict=ReviewVerdict.APPROVE,
+        reasoning="Citations match retrieved CV evidence.",
+    )
+    assert invocations == []
+
+
 def test_reviewer_node_revises_answer_once() -> None:
     model, _ = make_reviewer_runnable(
         ReviewOutput(
@@ -92,6 +131,7 @@ def test_reviewer_node_revises_answer_once() -> None:
             "reranked_chunks": [chunk],
         },
         model=model,
+        enable_llm_review=True,
     )
 
     assert update["review"] == ReviewOutput(
@@ -187,12 +227,13 @@ def test_reviewer_build_model_parses_json_without_tool_calling(
             )
         ],
         model=build_reviewer_model(
-            RAGModelSettings(
+            RAGConfig(
                 openai_base_url="http://localhost:11434/v1",
                 openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",
             )
         ),
+        enable_llm_review=True,
     )
 
     init_kwargs = captured["init"]

@@ -17,12 +17,12 @@ if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable, RunnableConfig
 
-    from cv_screener.config import RAGModelSettings
+    from cv_screener.config import RAGConfig
     from cv_screener.rag.state import RAGState
 
 
 def build_planner_model(
-    settings: RAGModelSettings | None = None,
+    settings: RAGConfig | None = None,
 ) -> Runnable[LanguageModelInput, PlannerOutput]:
     """Build the structured planner model for OpenAI-compatible chat backends."""
     return build_structured_output_model(PlannerOutput, settings=settings)

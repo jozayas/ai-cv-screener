@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable, RunnableConfig
 
-    from cv_screener.config import RAGModelSettings
+    from cv_screener.config import RAGConfig
     from cv_screener.rag.state import RAGState
     from cv_screener.retrieval.schema import RetrievedChunk
 
@@ -26,7 +26,7 @@ ABSTAINED_ANSWER = "I don't have enough information in the indexed CVs to answer
 
 
 def build_answer_model(
-    settings: RAGModelSettings | None = None,
+    settings: RAGConfig | None = None,
 ) -> Runnable[LanguageModelInput, AnswerOutput]:
     """Build the structured answer model for OpenAI-compatible chat backends."""
     return build_structured_output_model(AnswerOutput, settings=settings)

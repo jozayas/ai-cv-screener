@@ -6,6 +6,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from cv_screener.config import AppSettings
+
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
@@ -105,13 +107,11 @@ def build_photo_generation_service(
 def build_cv_ingestion_service(*, pdf_dir: Path) -> CVIngestionServiceProtocol:
     """Build the ingestion service lazily to keep CLI import overhead low."""
     ingestion_module = import_module("cv_screener.ingestion.ingest")
-    config_module = import_module("cv_screener.config")
-    persistence_module = import_module("cv_screener.persistence")
-
-    sqlite_settings = config_module.SQLiteSettings()
-    canonical_store = persistence_module.SQLiteCanonicalRepository(
-        sqlite_path=Path(sqlite_settings.sqlite_path),
-        content_dir=Path("data/cvs_contents"),
+    repository_module = import_module("cv_screener.persistence.repository")
+    settings = AppSettings()
+    canonical_store = repository_module.SQLiteCanonicalRepository(
+        sqlite_path=Path(settings.sqlite.sqlite_path),
+        content_dir=settings.paths.cv_content_dir,
     )
     service = ingestion_module.CVIngestionService(
         pdf_dir=pdf_dir,
@@ -127,13 +127,14 @@ def build_hybrid_retriever() -> HybridRetrieverProtocol:
 
 
 def build_rag_query_service(
-    *, candidate_name_min_score: float
+    *, settings: AppSettings | None = None
 ) -> RAGQueryServiceProtocol:
     """Build the RAG query service lazily to keep CLI help fast."""
     module = import_module("cv_screener.rag.service")
+    resolved_settings = settings or AppSettings()
     return cast(
         "RAGQueryServiceProtocol",
-        module.RAGQueryService(candidate_name_min_score=candidate_name_min_score),
+        module.RAGQueryService(settings=resolved_settings),
     )
 
 

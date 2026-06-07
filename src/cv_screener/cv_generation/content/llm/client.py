@@ -2,7 +2,7 @@
 
 from openai import OpenAI
 
-from cv_screener.config import GenerationSettings
+from cv_screener.config import GenerationConfig
 from cv_screener.cv_generation.content.llm.prompts import (
     CVLanguage,
     CVTargetPages,
@@ -13,7 +13,7 @@ from cv_screener.cv_generation.content.llm.prompts import (
 class OpenAICVGenerationClient:
     """Thin client for requesting raw CV draft completions."""
 
-    def __init__(self, settings: GenerationSettings) -> None:
+    def __init__(self, settings: GenerationConfig) -> None:
         """Initialize the OpenAI-compatible client."""
         self.settings = settings
         self.client = OpenAI(

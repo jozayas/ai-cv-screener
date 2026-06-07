@@ -77,5 +77,5 @@ Older documentation that references additional commands is stale.
 - `Give me the CV of <candidate>` returns the matched CV document directly.
 - `Summarize the profile of <candidate>` resolves the matched CV document directly, then summarizes from that CV content.
 - `Summarize the profile of <partial name>` asks for clarification when the name is missing or ambiguous.
-- `Who knows Python?` and `Who has Python experience?` use deterministic targeted lookup and return every matching candidate with deduped evidence.
+- `Who knows Python?` and `Who has Python experience?` are routed to the targeted lookup branch when the router classifies them as exact skill lookups.
 - Broader recruiter-style questions like `Who has Python backend experience?` still use the planner/retrieval/rerank path.

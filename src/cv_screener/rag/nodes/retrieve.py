@@ -1,4 +1,4 @@
-"""Deterministic retrieval node over the hybrid retriever."""
+"""Retrieval node over the hybrid retriever."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class RetrieverProtocol(Protocol):
-    """Behavior required from the deterministic retrieval node."""
+    """Behavior required from the retrieval node."""
 
     def retrieve(self, query_text: str) -> list[RetrievedChunk]:
         """Return ranked chunks for a retrieval-oriented query."""
@@ -23,14 +23,18 @@ def retrieve_node(
     state: RAGState,
     *,
     retriever: RetrieverProtocol,
+    max_queries: int = 1,
 ) -> dict[str, list[RetrievedChunk]]:
     """Fetch retrieved chunks for the planner's primary query and alternate queries."""
     planner = state.get("planner")
     if not isinstance(planner, PlannerOutput):
         msg = "retrieval state must include planner output"
         raise TypeError(msg)
+    if max_queries < 1:
+        msg = "max_queries must be at least 1"
+        raise ValueError(msg)
 
-    queries = [planner.primary_query, *planner.alternate_queries]
+    queries = [planner.primary_query, *planner.alternate_queries][:max_queries]
     all_chunks: list[RetrievedChunk] = []
     for query in queries:
         all_chunks.extend(retriever.retrieve(query))

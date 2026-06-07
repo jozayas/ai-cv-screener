@@ -18,7 +18,7 @@ from cv_screener.cv_generation.content.schema import CVProfileDraft
 from cv_screener.cv_generation.content.seed_data import SEED_PROFILES
 
 if TYPE_CHECKING:
-    from cv_screener.config import GenerationSettings
+    from cv_screener.config import GenerationConfig
     from cv_screener.cv_generation.content.llm.prompts import (
         CVLanguage,
         CVTargetPages,
@@ -59,7 +59,7 @@ class SeededCVProfileSource:
 class OpenAICVProfileSource:
     """OpenAI-compatible source for model-backed CV generation."""
 
-    def __init__(self, settings: GenerationSettings) -> None:
+    def __init__(self, settings: GenerationConfig) -> None:
         """Initialize the OpenAI-compatible client."""
         self.settings = settings
         self.client = OpenAICVGenerationClient(settings)

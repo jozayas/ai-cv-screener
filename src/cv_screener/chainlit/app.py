@@ -18,7 +18,7 @@ from cv_screener.cli.dependencies import (
     RAGQueryServiceProtocol,
     build_rag_query_service,
 )
-from cv_screener.config import LookupSettings
+from cv_screener.config import AppSettings
 
 config.ui.cot = "tool_call"
 
@@ -59,9 +59,7 @@ def _get_query_service() -> RAGQueryServiceProtocol:
         cl.user_session.get("rag_query_service"),
     )
     if service is None:
-        service = build_rag_query_service(
-            candidate_name_min_score=LookupSettings().candidate_name_min_score,
-        )
+        service = build_rag_query_service(settings=AppSettings())
         cl.user_session.set("rag_query_service", service)
     return service
 

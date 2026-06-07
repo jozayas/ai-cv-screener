@@ -3,7 +3,7 @@ from langchain_core.messages import AIMessage
 from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
-from cv_screener.config import RAGModelSettings
+from cv_screener.config import RAGConfig
 from cv_screener.rag.llm import build_structured_output_model
 from cv_screener.rag.schema import RouteDecision, RouteTarget
 
@@ -29,7 +29,7 @@ def test_build_structured_output_model_repairs_invalid_json_once(
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     model = build_structured_output_model(
         RouteDecision,
-        settings=RAGModelSettings(
+        settings=RAGConfig(
             openai_base_url="http://localhost:11434/v1",
             openai_api_key=SecretStr("ollama"),
             rag_model="gemma3:12b",
@@ -67,7 +67,7 @@ def test_build_structured_output_model_extracts_json_from_content_dict(
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     model = build_structured_output_model(
         RouteDecision,
-        settings=RAGModelSettings(
+        settings=RAGConfig(
             openai_base_url="http://localhost:11434/v1",
             openai_api_key=SecretStr("ollama"),
             rag_model="gemma3:12b",
@@ -98,7 +98,7 @@ def test_build_structured_output_model_extracts_json_from_ai_message(
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     model = build_structured_output_model(
         RouteDecision,
-        settings=RAGModelSettings(
+        settings=RAGConfig(
             openai_base_url="http://localhost:11434/v1",
             openai_api_key=SecretStr("ollama"),
             rag_model="gemma3:12b",

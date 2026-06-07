@@ -7,7 +7,7 @@ from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
-from cv_screener.config import RAGModelSettings
+from cv_screener.config import RAGConfig
 from cv_screener.rag.nodes.brief_answer import (
     answer_briefly,
     brief_answer_node,
@@ -78,7 +78,7 @@ def test_build_brief_answer_model_parses_json_without_tool_calling(
         "hello",
         RouteDecision(route=RouteTarget.SMALL_TALK, reasoning="Greeting."),
         model=build_brief_answer_model(
-            RAGModelSettings(
+            RAGConfig(
                 openai_base_url="http://localhost:11434/v1",
                 openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",

@@ -1,4 +1,4 @@
-from cv_screener.rag.nodes.rerank import LocalReranker, reranker_node
+from cv_screener.rag.nodes.rerank import LocalReranker, ScoreReranker, reranker_node
 from cv_screener.rag.schema import PlannerOutput
 from cv_screener.retrieval.schema import RetrievedChunk
 
@@ -35,6 +35,74 @@ class FakeGraphReranker:
     ) -> list[RetrievedChunk]:
         self.calls.append((query_text, chunks, top_k))
         return self.response
+
+
+def test_local_reranker_loads_model_only_when_used() -> None:
+    calls: list[str] = []
+    cross_encoder = FakeCrossEncoder([1.0])
+
+    def model_factory(model_name: str) -> FakeCrossEncoder:
+        calls.append(model_name)
+        return cross_encoder
+
+    reranker = LocalReranker(model_factory=model_factory)
+
+    assert calls == []
+
+    _ = reranker.rerank(
+        "python",
+        [
+            RetrievedChunk(
+                source_file="ada.pdf",
+                document_title="Ada Lovelace CV",
+                page=1,
+                section="Experience",
+                text="Python.",
+                score=0.7,
+                rank=1,
+            )
+        ],
+    )
+
+    assert calls == ["cross-encoder/ms-marco-MiniLM-L6-v2"]
+
+
+def test_score_reranker_sorts_by_existing_retrieval_score() -> None:
+    reranker = ScoreReranker(top_k=2)
+    chunks = [
+        RetrievedChunk(
+            source_file="low.pdf",
+            document_title="Low CV",
+            page=1,
+            section="Experience",
+            text="Low score.",
+            score=0.2,
+            rank=3,
+        ),
+        RetrievedChunk(
+            source_file="high.pdf",
+            document_title="High CV",
+            page=1,
+            section="Experience",
+            text="High score.",
+            score=0.9,
+            rank=1,
+        ),
+        RetrievedChunk(
+            source_file="mid.pdf",
+            document_title="Mid CV",
+            page=1,
+            section="Experience",
+            text="Mid score.",
+            score=0.5,
+            rank=2,
+        ),
+    ]
+
+    reranked = reranker.rerank("ignored", chunks)
+
+    assert [chunk.source_file for chunk in reranked] == ["high.pdf", "mid.pdf"]
+    assert [chunk.rank for chunk in reranked] == [1, 2]
 
 
 def test_local_reranker_sorts_by_cross_encoder_score() -> None:
@@ -82,6 +150,38 @@ def test_local_reranker_sorts_by_cross_encoder_score() -> None:
         ["systems engineer", "Python and APIs."],
         ["systems engineer", "Compiler engineering and COBOL."],
         ["systems engineer", "Kernel work and C systems programming."],
+    ]
+
+
+def test_local_reranker_limits_cross_encoder_input() -> None:
+    cross_encoder = FakeCrossEncoder([0.9, 0.8])
+    reranker = LocalReranker(
+        top_k=2,
+        max_input_chunks=2,
+        model_factory=lambda _: cross_encoder,
+    )
+    chunks = [
+        RetrievedChunk(
+            source_file=f"candidate-{index}.pdf",
+            document_title=f"Candidate {index} CV",
+            page=1,
+            section="Experience",
+            text=f"Candidate {index} experience.",
+            score=float(10 - index),
+            rank=index,
+        )
+        for index in range(1, 6)
+    ]
+
+    reranked = reranker.rerank("backend engineer", chunks)
+
+    assert [chunk.source_file for chunk in reranked] == [
+        "candidate-1.pdf",
+        "candidate-2.pdf",
+    ]
+    assert cross_encoder.inputs == [
+        ["backend engineer", "Candidate 1 experience."],
+        ["backend engineer", "Candidate 2 experience."],
     ]
 
 

@@ -303,18 +303,73 @@ def test_graph_routes_cv_queries_through_rerank_answer_and_review() -> None:
     )
     assert result.get("review") == ReviewOutput(
         verdict=ReviewVerdict.APPROVE,
-        reasoning="The cited chunk supports the answer.",
+        reasoning="Citations match retrieved CV evidence.",
     )
     assert result.get("final_text") == (
         "Ada Lovelace has Python backend experience.\n\n"
         "Sources:\n"
         "[2] Ada Lovelace - ada-lovelace.pdf (page 2, Experience)"
     )
-    assert retriever.queries == [
-        "python backend engineer",
-        "python api engineer",
-    ]
+    assert retriever.queries == ["python backend engineer"]
     assert reranker.calls == [("python backend engineer", merged_chunks, None)]
+
+
+def test_graph_uses_configured_retrieval_query_limit() -> None:
+    retrieved_chunk = RetrievedChunk(
+        source_file="ada-lovelace.pdf",
+        document_title="Ada Lovelace CV",
+        page=2,
+        section="Experience",
+        text="Built Python data pipelines and internal APIs.",
+        score=0.72,
+        rank=1,
+    )
+    retriever = FakeRetriever([retrieved_chunk])
+    reranker = FakeReranker([retrieved_chunk])
+    dependencies = GraphDependencies(
+        router_model=make_runnable(
+            RouteDecision(
+                route=RouteTarget.CV_QUERY,
+                reasoning="The user is asking about candidate skills.",
+            )
+        ),
+        planner_model=make_runnable(
+            PlannerOutput(
+                primary_query="python backend engineer",
+                alternate_queries=["python api engineer", "django engineer"],
+            )
+        ),
+        brief_answer_model=make_runnable(BriefAnswerOutput(text="unused")),
+        lookup_service=FakeLookupService(),
+        retriever=retriever,
+        reranker=reranker,
+        answer_model=make_runnable(
+            AnswerOutput(
+                answer="Ada Lovelace has Python backend experience.",
+                citations=[
+                    AnswerCitation(
+                        rank=1,
+                        candidate_name="Ada Lovelace",
+                        source_file="ada-lovelace.pdf",
+                        page=2,
+                        section="Experience",
+                    )
+                ],
+            )
+        ),
+        reviewer_model=make_runnable(
+            ReviewOutput(verdict=ReviewVerdict.APPROVE, reasoning="unused")
+        ),
+        max_retrieval_queries=2,
+    )
+    graph = build_rag_graph()
+
+    _ = graph.invoke(
+        {"user_query": "Who has Python backend experience?"},
+        context=dependencies,
+    )
+
+    assert retriever.queries == ["python backend engineer", "python api engineer"]
 
 
 def test_graph_retries_review_once_after_revise_verdict() -> None:
@@ -369,6 +424,7 @@ def test_graph_retries_review_once_after_revise_verdict() -> None:
                 ),
             ]
         ),
+        enable_llm_review=True,
     )
     graph = build_rag_graph()
 
@@ -890,8 +946,8 @@ def test_graph_routes_experience_with_python_queries_to_targeted_skill_lookup() 
     dependencies = GraphDependencies(
         router_model=make_runnable(
             RouteDecision(
-                route=RouteTarget.CV_QUERY,
-                reasoning="unused",
+                route=RouteTarget.TARGETED_LOOKUP,
+                reasoning="The user asks for an exact skill lookup.",
             )
         ),
         planner_model=make_runnable(PlannerOutput(primary_query="unused")),

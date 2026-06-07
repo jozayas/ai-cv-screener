@@ -7,7 +7,7 @@ from langchain_core.runnables.base import Runnable
 from pydantic import SecretStr
 
 import cv_screener.rag.llm as llm_module
-from cv_screener.config import RAGModelSettings
+from cv_screener.config import RAGConfig
 from cv_screener.rag.nodes.planner import (
     build_planner_model,
     plan_query,
@@ -92,6 +92,26 @@ def test_planner_node_returns_state_update() -> None:
     }
 
 
+def test_planner_node_always_uses_structured_model_for_cv_routes() -> None:
+    model, invocations = make_planner_runnable(
+        PlannerOutput(primary_query="platform migrations")
+    )
+
+    update = planner_node(
+        {
+            "user_query": "Which candidates led platform migrations?",
+            "route": RouteDecision(
+                route=RouteTarget.CV_QUERY,
+                reasoning="The query asks about candidate CV contents.",
+            ),
+        },
+        model=model,
+    )
+
+    assert update == {"planner": PlannerOutput(primary_query="platform migrations")}
+    assert len(invocations) == 1
+
+
 def test_planner_requires_primary_query() -> None:
     model, _ = make_planner_runnable(
         {
@@ -124,7 +144,7 @@ def test_planner_build_model_parses_json_without_tool_calling(
     result = plan_query(
         "Who has Python experience?",
         model=build_planner_model(
-            RAGModelSettings(
+            RAGConfig(
                 openai_base_url="http://localhost:11434/v1",
                 openai_api_key=SecretStr("ollama"),
                 rag_model="gemma3:12b",

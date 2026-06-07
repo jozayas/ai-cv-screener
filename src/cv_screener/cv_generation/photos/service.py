@@ -16,7 +16,7 @@ import httpx
 from loguru import logger
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 
-from cv_screener.config import GenerationSettings, ImageGenerationProvider
+from cv_screener.config import AppSettings, GenerationConfig, ImageGenerationProvider
 from cv_screener.cv_generation.content.yaml_io import load_cv_profile, write_cv_profile
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ class HeadshotGenerationClient(Protocol):
 class OpenAIHeadshotGenerationClient:
     """OpenAI-compatible client for synthetic CV headshots."""
 
-    def __init__(self, settings: GenerationSettings) -> None:
+    def __init__(self, settings: GenerationConfig) -> None:
         """Initialize the image-generation client."""
         self.settings = settings
         self.client = OpenAI(
@@ -72,7 +72,7 @@ class OpenAIHeadshotGenerationClient:
 class PollinationsHeadshotGenerationClient:
     """Pollinations client for synthetic CV headshots."""
 
-    def __init__(self, settings: GenerationSettings) -> None:
+    def __init__(self, settings: GenerationConfig) -> None:
         """Initialize the Pollinations client."""
         self.settings = settings
 
@@ -103,7 +103,7 @@ class PollinationsHeadshotGenerationClient:
 class HuggingFaceHeadshotGenerationClient:
     """Hugging Face inference client for synthetic CV headshots."""
 
-    def __init__(self, settings: GenerationSettings) -> None:
+    def __init__(self, settings: GenerationConfig) -> None:
         """Initialize the Hugging Face client."""
         self.settings = settings
 
@@ -159,11 +159,11 @@ class CVPhotoGenerationService:
         *,
         photo_dir: Path,
         client: HeadshotGenerationClient | None = None,
-        settings: GenerationSettings | None = None,
+        settings: GenerationConfig | None = None,
     ) -> None:
         """Initialize the photo generation service."""
         self.photo_dir = photo_dir
-        self.settings = settings or GenerationSettings()
+        self.settings = settings or AppSettings().generation
         self.client = client or self._build_client(self.settings)
         self._request_lock = Lock()
         self._last_request_at = 0.0
@@ -321,7 +321,7 @@ class CVPhotoGenerationService:
         )
 
     @staticmethod
-    def _build_client(settings: GenerationSettings) -> HeadshotGenerationClient:
+    def _build_client(settings: GenerationConfig) -> HeadshotGenerationClient:
         provider = settings.image_generation_provider
         if provider is ImageGenerationProvider.POLLINATIONS:
             return PollinationsHeadshotGenerationClient(settings)

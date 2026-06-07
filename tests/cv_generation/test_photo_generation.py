@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from cv_screener.config import GenerationSettings, ImageGenerationProvider
+from cv_screener.config import GenerationConfig, ImageGenerationProvider
 from cv_screener.cv_generation.content.schema import CVProfile
 from cv_screener.cv_generation.content.yaml_io import load_cv_profile, write_cv_profile
 from cv_screener.cv_generation.photos.service import (
@@ -126,7 +126,7 @@ def test_generate_files_skips_profiles_with_valid_photo_path(
 def test_service_uses_pollinations_client_when_configured(tmp_path: Path) -> None:
     service = CVPhotoGenerationService(
         photo_dir=tmp_path,
-        settings=GenerationSettings(
+        settings=GenerationConfig(
             image_generation_provider=ImageGenerationProvider.POLLINATIONS,
         ),
     )
@@ -137,7 +137,7 @@ def test_service_uses_pollinations_client_when_configured(tmp_path: Path) -> Non
 def test_service_uses_huggingface_client_when_configured(tmp_path: Path) -> None:
     service = CVPhotoGenerationService(
         photo_dir=tmp_path,
-        settings=GenerationSettings(
+        settings=GenerationConfig(
             image_generation_provider=ImageGenerationProvider.HUGGINGFACE,
             huggingface_api_key="hf-secret",
         ),
@@ -189,7 +189,7 @@ def test_pollinations_client_builds_image_request(
         fake_get,
     )
 
-    client = PollinationsHeadshotGenerationClient(GenerationSettings())
+    client = PollinationsHeadshotGenerationClient(GenerationConfig())
     image_bytes = client.generate_headshot(
         prompt="professional synthetic headshot\nsquare portrait"
     )
@@ -258,7 +258,7 @@ def test_huggingface_client_builds_json_request(
     )
 
     client = HuggingFaceHeadshotGenerationClient(
-        GenerationSettings(huggingface_api_key="hf-secret")
+        GenerationConfig(huggingface_api_key="hf-secret")
     )
     image_bytes = client.generate_headshot(prompt="professional synthetic headshot")
 

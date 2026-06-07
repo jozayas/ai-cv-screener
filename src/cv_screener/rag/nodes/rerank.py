@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import TYPE_CHECKING, Protocol, cast
-
-from sentence_transformers import CrossEncoder
 
 from cv_screener.rag.schema import PlannerOutput
 
@@ -15,8 +14,10 @@ if TYPE_CHECKING:
     from cv_screener.retrieval.schema import RetrievedChunk
 
 
-DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
-FALLBACK_RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
+FAST_RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
+HIGH_QUALITY_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+DEFAULT_RERANKER_MODEL = FAST_RERANKER_MODEL
+FALLBACK_RERANKER_MODEL = FAST_RERANKER_MODEL
 
 
 class CrossEncoderProtocol(Protocol):
@@ -48,6 +49,33 @@ class RerankerProtocol(Protocol):
         ...
 
 
+class ScoreReranker:
+    """Fast deterministic reranker that trusts fused retrieval scores."""
+
+    def __init__(self, *, top_k: int = 5) -> None:
+        """Configure how many fused retrieval results to keep."""
+        if top_k < 1:
+            msg = "top_k must be at least 1"
+            raise ValueError(msg)
+        self.top_k = top_k
+
+    def rerank(
+        self,
+        query_text: str,
+        chunks: list[RetrievedChunk],
+        *,
+        top_k: int | None = None,
+    ) -> list[RetrievedChunk]:
+        """Return top chunks by current retrieval score."""
+        del query_text
+        limited_top_k = top_k or self.top_k
+        ranked_chunks = sorted(chunks, key=lambda chunk: chunk.score, reverse=True)
+        return [
+            chunk.model_copy(update={"rank": rank})
+            for rank, chunk in enumerate(ranked_chunks[:limited_top_k], start=1)
+        ]
+
+
 class LocalReranker:
     """Local cross-encoder reranker over retrieved CV chunks."""
 
@@ -56,14 +84,23 @@ class LocalReranker:
         *,
         model_name: str = DEFAULT_RERANKER_MODEL,
         top_k: int = 5,
+        max_input_chunks: int = 6,
         batch_size: int = 16,
         model_factory: Callable[[str], CrossEncoderProtocol] | None = None,
     ) -> None:
         """Load the configured cross-encoder once for repeated reranking calls."""
+        if top_k < 1:
+            msg = "top_k must be at least 1"
+            raise ValueError(msg)
+        if max_input_chunks < 1:
+            msg = "max_input_chunks must be at least 1"
+            raise ValueError(msg)
         self.top_k = top_k
+        self.max_input_chunks = max_input_chunks
         self.batch_size = batch_size
-        factory = model_factory or _default_cross_encoder_factory
-        self._model = factory(model_name)
+        self._model_name = model_name
+        self._model_factory = model_factory or _default_cross_encoder_factory
+        self._model: CrossEncoderProtocol | None = None
 
     def rerank(
         self,
@@ -77,8 +114,9 @@ class LocalReranker:
             return []
 
         limited_top_k = top_k or self.top_k
-        sentence_pairs = [[query_text, chunk.text] for chunk in chunks]
-        raw_scores = self._model.predict(
+        candidate_chunks = chunks[: self.max_input_chunks]
+        sentence_pairs = [[query_text, chunk.text] for chunk in candidate_chunks]
+        raw_scores = self._get_model().predict(
             sentence_pairs,
             batch_size=self.batch_size,
             show_progress_bar=False,
@@ -86,7 +124,7 @@ class LocalReranker:
         )
         scores = [float(score) for score in raw_scores]
         ranked_pairs = sorted(
-            zip(chunks, scores, strict=True),
+            zip(candidate_chunks, scores, strict=True),
             key=lambda item: item[1],
             reverse=True,
         )
@@ -96,6 +134,11 @@ class LocalReranker:
                 chunk.model_copy(update={"score": score, "rank": rank})
             )
         return reranked_chunks
+
+    def _get_model(self) -> CrossEncoderProtocol:
+        if self._model is None:
+            self._model = self._model_factory(self._model_name)
+        return self._model
 
 
 def reranker_node(
@@ -130,4 +173,6 @@ def reranker_node(
 
 
 def _default_cross_encoder_factory(model_name: str) -> CrossEncoderProtocol:
-    return cast("CrossEncoderProtocol", cast("object", CrossEncoder(model_name)))
+    module = import_module("sentence_transformers")
+    cross_encoder = module.CrossEncoder
+    return cast("CrossEncoderProtocol", cast("object", cross_encoder(model_name)))

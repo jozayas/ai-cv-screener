@@ -45,7 +45,7 @@ The router now has four meaningful runtime branches:
    - path: `router -> return_cv -> finalize`
    - behavior: bypass retrieval and return the resolved CV document directly
 
-3. Deterministic targeted lookup requests
+3. Exact targeted lookup requests
    - examples: `Who knows Python?`, `Who has Python experience?`, `Summarize the profile of Alejandro García Martínez`
    - path starts at `router -> targeted_lookup`
    - three sub-paths exist:

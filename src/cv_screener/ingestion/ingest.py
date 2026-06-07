@@ -6,13 +6,13 @@ from typing import Protocol
 
 from loguru import logger
 
-from cv_screener.ingestion.chunking import chunk_cvs
+from cv_screener.ingestion.chunking.chunker import chunk_cvs
 from cv_screener.ingestion.chunking.schema import Chunk
-from cv_screener.ingestion.indexing import QdrantChunkIndexer
+from cv_screener.ingestion.indexing.qdrant import QdrantChunkIndexer
 from cv_screener.ingestion.parser import parse_directory
 from cv_screener.ingestion.parsing.schema import ParsedCV
 from cv_screener.ingestion.schema import IngestionSummary
-from cv_screener.persistence import CanonicalStoreProtocol
+from cv_screener.persistence.repository import CanonicalStoreProtocol
 
 type ParseProgressCallback = Callable[[int, int], None]
 type IngestionProgressCallback = Callable[[int, int, str], None]

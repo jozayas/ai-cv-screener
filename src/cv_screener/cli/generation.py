@@ -2,13 +2,13 @@
 
 from importlib import import_module
 from pathlib import Path
-from typing import cast
 
 import typer
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from cv_screener.cli.dependencies import build_photo_generation_service
 from cv_screener.cli.runtime import init_command, should_use_progress
+from cv_screener.config import AppSettings
 from cv_screener.cv_generation.content.generator import (
     CVGenerationService,
     CVProfileSource,
@@ -56,13 +56,9 @@ def build_profile_source(mode: GenerationMode) -> CVProfileSource:
     sources_module = import_module("cv_screener.cv_generation.content.sources")
 
     if mode is GenerationMode.LLM:
-        config_module = import_module("cv_screener.config")
-        settings_type = cast("type[object]", config_module.GenerationSettings)
-        source = sources_module.OpenAICVProfileSource(settings_type())
-        return cast("CVProfileSource", source)
+        return sources_module.OpenAICVProfileSource(AppSettings().generation)
 
-    source = sources_module.SeededCVProfileSource()
-    return cast("CVProfileSource", source)
+    return sources_module.SeededCVProfileSource()
 
 
 def generate_cv_photo_files(

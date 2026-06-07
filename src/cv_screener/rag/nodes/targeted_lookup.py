@@ -1,4 +1,4 @@
-"""Deterministic SQLite-first lookup nodes for targeted CV queries."""
+"""SQLite-first lookup nodes for exact targeted CV queries."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class LookupServiceProtocol(Protocol):
-    """Structural interface for deterministic SQLite-first CV lookups."""
+    """Structural interface for SQLite-first CV lookups."""
 
     def find_candidate_by_name(self, name: str) -> CandidateMatch | None:
         """Find a candidate by exact full-name match."""
