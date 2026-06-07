@@ -26,7 +26,7 @@ ABSTAINED_ANSWER = "I don't have enough information in the indexed CVs to answer
 
 
 def build_answer_model(
-    settings: RAGConfig | None = None,
+    settings: RAGConfig,
 ) -> Runnable[LanguageModelInput, AnswerOutput]:
     """Build the structured answer model for OpenAI-compatible chat backends."""
     return build_structured_output_model(AnswerOutput, settings=settings)

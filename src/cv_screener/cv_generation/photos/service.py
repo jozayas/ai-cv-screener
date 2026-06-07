@@ -16,7 +16,7 @@ import httpx
 from loguru import logger
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 
-from cv_screener.config import AppSettings, GenerationConfig, ImageGenerationProvider
+from cv_screener.config import GenerationConfig, ImageGenerationProvider
 from cv_screener.cv_generation.content.yaml_io import load_cv_profile, write_cv_profile
 
 if TYPE_CHECKING:
@@ -163,7 +163,7 @@ class CVPhotoGenerationService:
     ) -> None:
         """Initialize the photo generation service."""
         self.photo_dir = photo_dir
-        self.settings = settings or AppSettings().generation
+        self.settings = settings or GenerationConfig()
         self.client = client or self._build_client(self.settings)
         self._request_lock = Lock()
         self._last_request_at = 0.0

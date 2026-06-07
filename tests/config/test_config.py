@@ -31,16 +31,11 @@ def test_qdrant_settings_read_from_environment(
     assert settings.qdrant_check_compatibility
 
 
-def test_qdrant_index_config_defaults_from_qdrant_settings(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("QDRANT__QDRANT_URL", "http://qdrant:6333")
-    monkeypatch.setenv("QDRANT__QDRANT_CHECK_COMPATIBILITY", "true")
-
+def test_qdrant_index_config_defaults_from_qdrant_config() -> None:
     config = QdrantIndexConfig()
 
-    assert config.url == "http://qdrant:6333"
-    assert config.check_compatibility
+    assert config.url == "http://localhost:6333"
+    assert not config.check_compatibility
 
 
 def test_rag_model_settings_default_to_local_ollama(

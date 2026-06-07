@@ -29,7 +29,7 @@ DEFAULT_REVIEW_PASSES = 1
 
 
 def build_reviewer_model(
-    settings: RAGConfig | None = None,
+    settings: RAGConfig,
 ) -> Runnable[LanguageModelInput, ReviewOutput]:
     """Build the structured reviewer model for OpenAI-compatible chat backends."""
     return build_structured_output_model(ReviewOutput, settings=settings)

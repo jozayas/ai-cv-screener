@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def build_brief_answer_model(
-    settings: RAGConfig | None = None,
+    settings: RAGConfig,
 ) -> Runnable[LanguageModelInput, BriefAnswerOutput]:
     """Build the structured brief-answer model for OpenAI-compatible chat backends."""
     return build_structured_output_model(BriefAnswerOutput, settings=settings)

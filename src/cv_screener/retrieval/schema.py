@@ -2,14 +2,14 @@
 
 from pydantic import BaseModel, Field
 
-from cv_screener.config import AppSettings
+from cv_screener.config import QdrantConfig
 
 
 class HybridRetrievalConfig(BaseModel):
     """Configuration for hybrid (dense + sparse) retrieval."""
 
     url: str = Field(
-        default_factory=lambda: AppSettings().qdrant.qdrant_url,
+        default_factory=lambda: QdrantConfig().qdrant_url,
         min_length=1,
         description="Base URL for the Qdrant HTTP API.",
     )

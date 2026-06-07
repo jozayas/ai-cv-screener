@@ -10,11 +10,11 @@ from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
 
-from cv_screener.config import AppSettings, RAGConfig
-
 if TYPE_CHECKING:
     from langchain_core.language_models import LanguageModelInput
     from langchain_core.runnables import Runnable, RunnableConfig
+
+    from cv_screener.config import RAGConfig
 
 MIN_FENCED_BLOCK_LINES = 3
 
@@ -22,16 +22,15 @@ MIN_FENCED_BLOCK_LINES = 3
 def build_structured_output_model[StructuredOutputT: BaseModel](
     schema: type[StructuredOutputT],
     *,
-    settings: RAGConfig | None = None,
+    settings: RAGConfig,
 ) -> Runnable[LanguageModelInput, StructuredOutputT]:
     """Build a chat model wrapper that returns schema-validated JSON."""
-    resolved_settings = settings or AppSettings().rag
     llm = ChatOpenAI(
-        model=resolved_settings.rag_model,
-        base_url=resolved_settings.openai_base_url,
-        api_key=resolved_settings.openai_api_key,
-        temperature=resolved_settings.rag_temperature,
-        max_retries=resolved_settings.rag_max_retries,
+        model=settings.rag_model,
+        base_url=settings.openai_base_url,
+        api_key=settings.openai_api_key,
+        temperature=settings.rag_temperature,
+        max_retries=settings.rag_max_retries,
     )
 
     def invoke_json_model(

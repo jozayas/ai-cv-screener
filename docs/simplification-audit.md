@@ -147,6 +147,7 @@ The revised plan should follow these documented idioms as closely as possible:
   - lookup
   - serve
 - Standardize on nested environment variables that mirror that tree, instead of keeping both nested and flat aliases for the same setting.
+- Keep `AppSettings` at the composition root only: CLI entrypoints, app startup, and service wiring may read it, but lower-level domain modules should receive narrower section configs like `RAGConfig`, `GenerationConfig`, and `QdrantConfig` explicitly instead of constructing `AppSettings()` themselves.
 - CLI options should override these settings explicitly.
 - Non-CLI code should accept config objects, not construct new settings internally.
 - Remove duplicated fallback constants once the setting exists in `AppSettings`.

@@ -141,10 +141,12 @@ def test_generate_cvs_command_orchestrates_generation_and_rendering(
         ctx: object | None,
         paths: list[Path],
         photo_dir: Path,
+        generation_settings: object,
     ) -> object:
         assert ctx is None
         assert paths == generated_paths
         assert photo_dir == Path("data/generated/photos")
+        assert generation_settings is not None
         calls.append(("photos", photo_dir, None))
         return photo_summary
 
@@ -218,7 +220,8 @@ def test_generate_photos_command_generates_for_directory(
     calls: list[tuple[str, Path]] = []
 
     class FakePhotoGenerationService:
-        def __init__(self, *, photo_dir: Path) -> None:
+        def __init__(self, *, photo_dir: Path, generation_settings: object) -> None:
+            assert generation_settings is not None
             calls.append(("init", photo_dir))
 
         def generate_directory(self, directory: Path) -> object:
@@ -365,7 +368,17 @@ def test_ingest_command_orchestrates_pdf_ingestion(
     calls: list[tuple[str, object, object | None]] = []
 
     class FakeIngestionService:
-        def __init__(self, *, pdf_dir: Path) -> None:
+        def __init__(
+            self,
+            *,
+            pdf_dir: Path,
+            sqlite_path: Path,
+            content_dir: Path,
+            qdrant_settings: object,
+        ) -> None:
+            assert sqlite_path == Path("data/cv_screener.db")
+            assert content_dir == Path("data/cvs_contents")
+            assert qdrant_settings is not None
             calls.append(("ingest_init", pdf_dir, None))
 
         def ingest(
@@ -417,8 +430,15 @@ def test_ingest_command_uses_progress_callback_when_enabled(
     captured: dict[str, object | None] = {"callback": None}
 
     class FakeIngestionService:
-        def __init__(self, *, pdf_dir: Path) -> None:
-            _ = pdf_dir
+        def __init__(
+            self,
+            *,
+            pdf_dir: Path,
+            sqlite_path: Path,
+            content_dir: Path,
+            qdrant_settings: object,
+        ) -> None:
+            _ = (pdf_dir, sqlite_path, content_dir, qdrant_settings)
 
         def ingest(
             self,

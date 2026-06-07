@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from importlib import import_module
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
-
-from cv_screener.config import AppSettings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from pathlib import Path
 
     from cv_screener.cli.serve import ChainlitLauncher
+    from cv_screener.config import GenerationConfig, QdrantConfig, RAGConfig
     from cv_screener.cv_generation.pdf.templates import TemplateId
     from cv_screener.cv_generation.photos.service import PhotoGenerationSummary
     from cv_screener.ingestion.schema import IngestionSummary
@@ -96,45 +95,77 @@ def build_pdf_rendering_service(
 
 
 def build_photo_generation_service(
-    *, photo_dir: Path
+    *, photo_dir: Path, generation_settings: GenerationConfig
 ) -> PhotoGenerationServiceProtocol:
     """Build the photo generation service lazily to keep CLI help fast."""
     module = import_module("cv_screener.cv_generation.photos.service")
-    service = module.CVPhotoGenerationService(photo_dir=photo_dir)
+    service = module.CVPhotoGenerationService(
+        photo_dir=photo_dir,
+        settings=generation_settings,
+    )
     return cast("PhotoGenerationServiceProtocol", service)
 
 
-def build_cv_ingestion_service(*, pdf_dir: Path) -> CVIngestionServiceProtocol:
+def build_cv_ingestion_service(
+    *,
+    pdf_dir: Path,
+    sqlite_path: Path,
+    content_dir: Path,
+    qdrant_settings: QdrantConfig,
+) -> CVIngestionServiceProtocol:
     """Build the ingestion service lazily to keep CLI import overhead low."""
     ingestion_module = import_module("cv_screener.ingestion.ingest")
+    qdrant_module = import_module("cv_screener.ingestion.indexing.qdrant")
+    schema_module = import_module("cv_screener.ingestion.indexing.schema")
     repository_module = import_module("cv_screener.persistence.repository")
-    settings = AppSettings()
     canonical_store = repository_module.SQLiteCanonicalRepository(
-        sqlite_path=Path(settings.sqlite.sqlite_path),
-        content_dir=settings.paths.cv_content_dir,
+        sqlite_path=sqlite_path,
+        content_dir=content_dir,
     )
     service = ingestion_module.CVIngestionService(
         pdf_dir=pdf_dir,
+        indexer=qdrant_module.QdrantChunkIndexer(
+            config=schema_module.QdrantIndexConfig(
+                url=qdrant_settings.qdrant_url,
+                check_compatibility=qdrant_settings.qdrant_check_compatibility,
+            )
+        ),
         canonical_store=canonical_store,
     )
     return cast("CVIngestionServiceProtocol", service)
 
 
-def build_hybrid_retriever() -> HybridRetrieverProtocol:
+def build_hybrid_retriever(*, qdrant_settings: QdrantConfig) -> HybridRetrieverProtocol:
     """Build the hybrid retriever lazily to keep CLI help fast."""
     module = import_module("cv_screener.retrieval.hybrid")
-    return cast("HybridRetrieverProtocol", module.HybridRetriever())
+    schema_module = import_module("cv_screener.retrieval.schema")
+    return cast(
+        "HybridRetrieverProtocol",
+        module.HybridRetriever(
+            config=schema_module.HybridRetrievalConfig(url=qdrant_settings.qdrant_url)
+        ),
+    )
 
 
 def build_rag_query_service(
-    *, settings: AppSettings | None = None
+    *,
+    rag_settings: RAGConfig,
+    sqlite_path: Path,
+    candidate_name_min_score: float,
+    qdrant_settings: QdrantConfig,
 ) -> RAGQueryServiceProtocol:
     """Build the RAG query service lazily to keep CLI help fast."""
     module = import_module("cv_screener.rag.service")
-    resolved_settings = settings or AppSettings()
     return cast(
         "RAGQueryServiceProtocol",
-        module.RAGQueryService(settings=resolved_settings),
+        module.RAGQueryService(
+            dependencies=module.build_graph_dependencies(
+                rag_settings=rag_settings,
+                sqlite_path=sqlite_path,
+                candidate_name_min_score=candidate_name_min_score,
+                qdrant_url=qdrant_settings.qdrant_url,
+            )
+        ),
     )
 
 

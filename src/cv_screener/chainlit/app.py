@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 import chainlit as cl
@@ -59,7 +60,13 @@ def _get_query_service() -> RAGQueryServiceProtocol:
         cl.user_session.get("rag_query_service"),
     )
     if service is None:
-        service = build_rag_query_service(settings=AppSettings())
+        settings = AppSettings()
+        service = build_rag_query_service(
+            rag_settings=settings.rag,
+            sqlite_path=Path(settings.sqlite.sqlite_path),
+            candidate_name_min_score=settings.lookup.candidate_name_min_score,
+            qdrant_settings=settings.qdrant,
+        )
         cl.user_session.set("rag_query_service", service)
     return service
 

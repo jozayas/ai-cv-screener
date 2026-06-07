@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def build_router_model(
-    settings: RAGConfig | None = None,
+    settings: RAGConfig,
 ) -> Runnable[LanguageModelInput, RouteDecision]:
     """Build the structured router model for OpenAI-compatible chat backends."""
     return build_structured_output_model(RouteDecision, settings=settings)

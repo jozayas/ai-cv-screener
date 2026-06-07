@@ -64,12 +64,14 @@ def generate_content(
     ),
 ) -> list[Path]:
     """Generate validated CV content YAML files."""
-    resolved_output_dir = output_dir or _settings().paths.cv_content_dir
+    settings = _settings()
+    resolved_output_dir = output_dir or settings.paths.cv_content_dir
     written_files = generate_cv_content_files(
         ctx=ctx,
         count=count,
         mode=mode,
         output_dir=resolved_output_dir,
+        generation_settings=settings.generation,
     )
     typer.echo(
         f"Generated {len(written_files)} CV YAML files in {resolved_output_dir}."
@@ -118,6 +120,7 @@ def generate_cvs(
         count=count,
         mode=mode,
         output_dir=resolved_content_dir,
+        generation_settings=settings.generation,
     )
     typer.echo(
         f"Generated {len(written_files)} CV YAML files in {resolved_content_dir}."
@@ -126,6 +129,7 @@ def generate_cvs(
         ctx=None,
         paths=written_files,
         photo_dir=resolved_photo_dir,
+        generation_settings=settings.generation,
     )
     typer.echo(
         f"Prepared {photo_summary.generated_count} CV photos in {resolved_photo_dir}."
@@ -160,8 +164,12 @@ def generate_photos(
 ) -> PhotoGenerationSummary:
     """Generate synthetic headshots for YAML CV profiles."""
     init_command(ctx)
-    resolved_photo_dir = photo_dir or _settings().paths.generated_photo_dir
-    service = build_photo_generation_service(photo_dir=resolved_photo_dir)
+    settings = _settings()
+    resolved_photo_dir = photo_dir or settings.paths.generated_photo_dir
+    service = build_photo_generation_service(
+        photo_dir=resolved_photo_dir,
+        generation_settings=settings.generation,
+    )
     summary = (
         service.generate_directory(input_path)
         if input_path.is_dir()
@@ -262,8 +270,14 @@ def ingest(
 ) -> IngestionSummary:
     """Parse rendered CV PDFs, chunk them, and index the chunks into Qdrant."""
     runtime, console = init_command(ctx)
-    resolved_pdf_dir = pdf_dir or _settings().paths.cv_pdf_dir
-    service = build_cv_ingestion_service(pdf_dir=resolved_pdf_dir)
+    settings = _settings()
+    resolved_pdf_dir = pdf_dir or settings.paths.cv_pdf_dir
+    service = build_cv_ingestion_service(
+        pdf_dir=resolved_pdf_dir,
+        sqlite_path=Path(settings.sqlite.sqlite_path),
+        content_dir=settings.paths.cv_content_dir,
+        qdrant_settings=settings.qdrant,
+    )
     pdf_count = len(sorted(resolved_pdf_dir.glob("*.pdf")))
 
     if (
@@ -320,7 +334,13 @@ def query(
 ) -> None:
     """Answer a recruiter-style question from indexed CV content."""
     init_command(ctx)
-    result = build_rag_query_service(settings=AppSettings()).run(query_text)
+    settings = _settings()
+    result = build_rag_query_service(
+        rag_settings=settings.rag,
+        sqlite_path=Path(settings.sqlite.sqlite_path),
+        candidate_name_min_score=settings.lookup.candidate_name_min_score,
+        qdrant_settings=settings.qdrant,
+    ).run(query_text)
     typer.echo(result.final_text)
 
 

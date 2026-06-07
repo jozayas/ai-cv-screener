@@ -4,19 +4,19 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from cv_screener.config import AppSettings
+from cv_screener.config import QdrantConfig
 
 
 class QdrantIndexConfig(BaseModel):
     """Configuration for semantic chunk indexing in Qdrant."""
 
     url: str = Field(
-        default_factory=lambda: AppSettings().qdrant.qdrant_url,
+        default_factory=lambda: QdrantConfig().qdrant_url,
         min_length=1,
         description="Base URL for the Qdrant HTTP API.",
     )
     check_compatibility: bool = Field(
-        default_factory=lambda: AppSettings().qdrant.qdrant_check_compatibility,
+        default_factory=lambda: QdrantConfig().qdrant_check_compatibility,
         description="Whether the client should verify server compatibility at startup.",
     )
     collection_name: str = Field(

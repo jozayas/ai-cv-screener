@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def build_planner_model(
-    settings: RAGConfig | None = None,
+    settings: RAGConfig,
 ) -> Runnable[LanguageModelInput, PlannerOutput]:
     """Build the structured planner model for OpenAI-compatible chat backends."""
     return build_structured_output_model(PlannerOutput, settings=settings)
